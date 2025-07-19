@@ -90,45 +90,60 @@ pub fn extractZip(allocator: std.mem.Allocator, archive_path: []const u8, destin
 
 /// Extract ZIP archive with path traversal validation
 fn extractZipWithValidation(allocator: std.mem.Allocator, dest_dir: std.fs.Dir, file: std.fs.File) !void {
-    var zip = std.zip.Iterator.init(file.reader()) catch |err| {
+    var seekable_stream = file.seekableStream();
+    const ZipIterator = std.zip.Iterator(@TypeOf(seekable_stream));
+    var zip = ZipIterator.init(seekable_stream) catch |err| {
         std.debug.print("Error: Failed to initialize ZIP reader: {}\n", .{err});
         return err;
     };
     
+    var filename_buf: [std.fs.max_path_bytes]u8 = undefined;
     while (try zip.next()) |entry| {
+        if (entry.filename_len > filename_buf.len) {
+            std.debug.print("Warning: Filename too long, skipping: {d} bytes\n", .{entry.filename_len});
+            continue;
+        }
+        
+        // Read filename from ZIP entry
+        try seekable_stream.seekTo(entry.header_zip_offset + @sizeOf(std.zip.CentralDirectoryFileHeader));
+        const filename = filename_buf[0..entry.filename_len];
+        const len = try seekable_stream.context.reader().readAll(filename);
+        if (len != filename.len) {
+            std.debug.print("Warning: Failed to read complete filename, skipping\n", .{});
+            continue;
+        }
+        
         // Validate the entry path for security
-        const safe_path = try validateAndSanitizePath(allocator, entry.name);
+        const safe_path = try validateAndSanitizePath(allocator, filename);
         defer allocator.free(safe_path);
         
         // Skip if path is unsafe
         if (safe_path.len == 0) {
-            std.debug.print("Warning: Skipping unsafe path in archive: {s}\n", .{entry.name});
+            std.debug.print("Warning: Skipping unsafe path in archive: {s}\n", .{filename});
             continue;
         }
         
-        if (entry.kind == .file) {
+        // Check if it's a directory (ends with '/')
+        if (filename[filename.len - 1] == '/') {
+            dest_dir.makePath(safe_path[0..safe_path.len - 1]) catch {};
+        } else {
             // Create any necessary parent directories
             if (std.fs.path.dirname(safe_path)) |parent_dir| {
                 dest_dir.makePath(parent_dir) catch {};
             }
             
-            // Create and write the file
-            const dest_file = try dest_dir.createFile(safe_path, .{});
-            defer dest_file.close();
-            
-            var buf: [8192]u8 = undefined;
-            while (true) {
-                const bytes_read = try entry.reader().read(&buf);
-                if (bytes_read == 0) break;
-                try dest_file.writeAll(buf[0..bytes_read]);
+            // Extract the file using the ZIP entry's extract method
+            const crc32 = try entry.extract(seekable_stream, .{}, &filename_buf, dest_dir);
+            if (crc32 != entry.crc32) {
+                std.debug.print("Warning: CRC32 mismatch for file: {s}\n", .{filename});
             }
             
-            // Set executable bit if needed (Unix only)
+            // Set executable bit if needed (Unix only) 
             if (builtin.os.tag != .windows and (std.mem.endsWith(u8, safe_path, "zig") or std.mem.endsWith(u8, safe_path, ".exe"))) {
+                const dest_file = dest_dir.openFile(safe_path, .{ .mode = .read_write }) catch continue;
+                defer dest_file.close();
                 dest_file.chmod(0o755) catch {};
             }
-        } else if (entry.kind == .directory) {
-            dest_dir.makePath(safe_path) catch {};
         }
     }
 }

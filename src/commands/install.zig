@@ -65,7 +65,11 @@ pub fn run(allocator: std.mem.Allocator, args: []const []const u8) !void {
             const platform = Platform.current();
             const instructions = switch (platform.os) {
                 .windows => "Please check directory permissions or run as Administrator",
-                else => std.fmt.allocPrint(allocator, "Please run: sudo chown {s}:{s} {s}", .{ std.posix.getenv("USER") orelse "user", std.posix.getenv("USER") orelse "user", bin_dir }) catch "Please fix directory permissions",
+                else => blk: {
+                    const user = std.process.getEnvVarOwned(allocator, "USER") catch "user";
+                    defer if (!std.mem.eql(u8, user, "user")) allocator.free(user);
+                    break :blk std.fmt.allocPrint(allocator, "Please run: sudo chown {s}:{s} {s}", .{ user, user, bin_dir }) catch "Please fix directory permissions";
+                },
             };
             std.debug.print("Error: Cannot create {s}. {s}\n", .{ bin_dir, instructions });
             return;

@@ -9,17 +9,18 @@ pub const Platform = struct {
         return Platform{ .os = builtin.os.tag };
     }
     
-    /// Get the user's home directory
-    pub fn getHomeDir() ![]const u8 {
+    /// Get the user's home directory with allocator (cross-platform)
+    pub fn getHomeDirAlloc(allocator: std.mem.Allocator) ![]u8 {
         return switch (builtin.os.tag) {
-            .windows => std.posix.getenv("USERPROFILE") orelse return error.NoHomeDir,
-            else => std.posix.getenv("HOME") orelse return error.NoHomeDir,
+            .windows => std.process.getEnvVarOwned(allocator, "USERPROFILE") catch return error.NoHomeDir,
+            else => std.process.getEnvVarOwned(allocator, "HOME") catch return error.NoHomeDir,
         };
     }
     
     /// Get platform-specific installation directory relative to home
     pub fn getInstallDir(allocator: std.mem.Allocator, version: []const u8) ![]u8 {
-        const home = try getHomeDir();
+        const home = try getHomeDirAlloc(allocator);
+        defer allocator.free(home);
         return switch (builtin.os.tag) {
             .windows => try std.fs.path.join(allocator, &.{ home, "bin", version }),
             else => try std.fs.path.join(allocator, &.{ home, "bin", version }),
@@ -28,7 +29,8 @@ pub const Platform = struct {
     
     /// Get platform-specific binary directory for symlinks/wrappers
     pub fn getBinDir(allocator: std.mem.Allocator) ![]u8 {
-        const home = try getHomeDir();
+        const home = try getHomeDirAlloc(allocator);
+        defer allocator.free(home);
         return switch (builtin.os.tag) {
             .windows => try std.fs.path.join(allocator, &.{ home, ".local", "bin" }),
             else => try std.fs.path.join(allocator, &.{ home, ".local", "bin" }),
@@ -37,7 +39,8 @@ pub const Platform = struct {
     
     /// Get platform-specific cache directory
     pub fn getCacheDir(allocator: std.mem.Allocator) ![]u8 {
-        const home = try getHomeDir();
+        const home = try getHomeDirAlloc(allocator);
+        defer allocator.free(home);
         return switch (builtin.os.tag) {
             .windows => try std.fs.path.join(allocator, &.{ home, "AppData", "Local", "zigup" }),
             else => try std.fs.path.join(allocator, &.{ home, ".cache", "zigup" }),

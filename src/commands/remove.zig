@@ -12,7 +12,8 @@ pub fn run(allocator: std.mem.Allocator, args: []const []const u8) !void {
     const version = args[0];
     try validation.validateVersionString(version);
 
-    const home = try Platform.getHomeDir();
+    const home = try Platform.getHomeDirAlloc(allocator);
+    defer allocator.free(home);
     try validation.validateEnvironmentPath(home);
 
     const version_dir = try Platform.getInstallDir(allocator, version);
