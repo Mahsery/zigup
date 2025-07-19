@@ -6,8 +6,9 @@ pub fn createSymlink(target: []const u8, link_path: []const u8) !void {
     try std.posix.symlink(target, link_path);
 }
 
-/// Extract a tar.xz archive to the specified destination directory
+/// Extract a tar.xz archive to the specified destination directory using native Zig implementation
 pub fn extractTarXz(allocator: std.mem.Allocator, archive_path: []const u8, destination: []const u8) !void {
+    // Create destination directory
     std.fs.cwd().makePath(destination) catch |err| switch (err) {
         error.AccessDenied => {
             std.debug.print("Error: Permission denied creating directory: {s}\n", .{destination});
@@ -17,25 +18,35 @@ pub fn extractTarXz(allocator: std.mem.Allocator, archive_path: []const u8, dest
         else => return err,
     };
     
-    var process = std.process.Child.init(&[_][]const u8{
-        "tar", "-xf", archive_path, "-C", destination, "--strip-components=1"
-    }, allocator);
+    // Read compressed archive
+    const compressed_data = std.fs.cwd().readFileAlloc(allocator, archive_path, 1024 * 1024 * 100) catch |err| {
+        std.debug.print("Error: Failed to read archive file: {}\n", .{err});
+        return err;
+    };
+    defer allocator.free(compressed_data);
     
-    const result = process.spawnAndWait() catch |err| {
-        std.debug.print("Error: Failed to run tar command: {}\n", .{err});
+    // Decompress XZ stream
+    var decompressed_stream = std.io.fixedBufferStream(compressed_data);
+    var decompressor = std.compress.xz.decompress(allocator, decompressed_stream.reader()) catch |err| {
+        std.debug.print("Error: Failed to decompress XZ archive: {}\n", .{err});
+        return err;
+    };
+    defer decompressor.deinit();
+    
+    // Open destination directory
+    const dest_dir = std.fs.cwd().openDir(destination, .{}) catch |err| {
+        std.debug.print("Error: Failed to open destination directory: {}\n", .{err});
         return err;
     };
     
-    switch (result) {
-        .Exited => |code| if (code != 0) {
-            std.debug.print("Error: tar extraction failed with exit code: {}\n", .{code});
-            return error.ExtractionFailed;
-        },
-        else => {
-            std.debug.print("Error: tar command terminated unexpectedly\n", .{});
-            return error.ExtractionFailed;
-        },
-    }
+    // Extract TAR using std.tar with security features
+    std.tar.pipeToFileSystem(dest_dir, decompressor.reader(), .{
+        .strip_components = 1,
+        .mode_mode = .executable_bit_only,
+    }) catch |err| {
+        std.debug.print("Error: TAR extraction failed: {}\n", .{err});
+        return err;
+    };
 }
 
 /// Download a file from URL to local filesystem
