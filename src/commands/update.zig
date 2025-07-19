@@ -9,6 +9,8 @@ pub fn run(allocator: std.mem.Allocator, args: []const []const u8) !void {
     std.debug.print("Fetching Zig version information...\n", .{});
     
     const url = "https://ziglang.org/download/index.json";
+    const fs_utils = @import("../utils/fs.zig");
+    try fs_utils.validateUrl(url);
     
     var client = std.http.Client{ .allocator = allocator };
     defer client.deinit();
