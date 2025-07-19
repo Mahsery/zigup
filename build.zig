@@ -22,12 +22,21 @@ pub fn build(b: *std.Build) void {
 
     b.installArtifact(exe);
 
-    // Add zigup install step
-    const install_zigup_step = b.step("install-zigup", "Install zigup to ~/.local/bin");
-    const install_zigup_cmd = b.addSystemCommand(&[_][]const u8{
-        "sh", "-c", 
-        \\mkdir -p ~/.local/bin && cp zig-out/bin/zigup ~/.local/bin/zigup && echo "zigup installed to ~/.local/bin/zigup"
-    });
+    // Add cross-platform zigup install step
+    const install_zigup_step = b.step("install-zigup", "Install zigup to local bin directory");
+    
+    // Create cross-platform installation command
+    const builtin = @import("builtin");
+    const install_zigup_cmd = switch (builtin.os.tag) {
+        .windows => b.addSystemCommand(&[_][]const u8{
+            "powershell", "-ExecutionPolicy", "Bypass", "-File", "install.ps1"
+        }),
+        else => b.addSystemCommand(&[_][]const u8{
+            "sh", "-c", 
+            \\mkdir -p ~/.local/bin && cp zig-out/bin/zigup ~/.local/bin/zigup && echo "zigup installed to ~/.local/bin/zigup"
+        }),
+    };
+    
     install_zigup_cmd.step.dependOn(b.getInstallStep());
     install_zigup_step.dependOn(&install_zigup_cmd.step);
 

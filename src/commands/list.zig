@@ -1,10 +1,11 @@
 const std = @import("std");
+const Platform = @import("../utils/platform.zig").Platform;
 
 /// List all locally installed Zig versions
 pub fn run(allocator: std.mem.Allocator, args: []const []const u8) !void {
     _ = args;
     
-    const home = std.posix.getenv("HOME") orelse return error.NoHomeDir;
+    const home = try Platform.getHomeDir();
     const bin_dir = try std.fs.path.join(allocator, &.{ home, "bin" });
     defer allocator.free(bin_dir);
     
@@ -19,10 +20,13 @@ pub fn run(allocator: std.mem.Allocator, args: []const []const u8) !void {
     
     std.debug.print("Installed Zig versions:\n", .{});
     
+    const zig_exe = try Platform.getExecutableName(allocator, "zig");
+    defer allocator.free(zig_exe);
+    
     var iterator = dir.iterate();
     while (try iterator.next()) |entry| {
         if (entry.kind == .directory) {
-            const zig_path = try std.fs.path.join(allocator, &.{ bin_dir, entry.name, "zig" });
+            const zig_path = try std.fs.path.join(allocator, &.{ bin_dir, entry.name, zig_exe });
             defer allocator.free(zig_path);
             
             std.fs.cwd().access(zig_path, .{}) catch continue;

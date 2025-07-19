@@ -4,6 +4,7 @@ const fs_utils = @import("../utils/fs.zig");
 const cache_utils = @import("../utils/cache.zig");
 const minisign = @import("../utils/minisign.zig");
 const validation = @import("../utils/validation.zig");
+const Platform = @import("../utils/platform.zig").Platform;
 
 /// Download and install a specific Zig version
 pub fn run(allocator: std.mem.Allocator, args: []const []const u8) !void {
@@ -36,9 +37,8 @@ pub fn run(allocator: std.mem.Allocator, args: []const []const u8) !void {
     var json_slice = std.io.fixedBufferStream(json_data);
     const document = try parser.parseFromReader(allocator, json_slice.reader().any());
     
-    const platform = try detectPlatform(allocator);
-    defer allocator.free(platform);
-    std.debug.print("Detected platform: {s}\n", .{platform});
+    const platform_str = Platform.getPlatformString();
+    std.debug.print("Detected platform: {s}\n", .{platform_str});
     
     const version_key = if (std.mem.eql(u8, version, "master") or std.mem.eql(u8, version, "nightly"))
         "master"
@@ -46,24 +46,28 @@ pub fn run(allocator: std.mem.Allocator, args: []const []const u8) !void {
         version;
     
     const version_obj = document.at(version_key);
-    const download_info = version_obj.at(platform);
+    const download_info = version_obj.at(platform_str);
     
     const tarball_url = download_info.at("tarball").asString() catch |err| switch (err) {
         error.MissingField => {
-            std.debug.print("Error: Version '{s}' or platform '{s}' not found\n", .{ version, platform });
+            std.debug.print("Error: Version '{s}' or platform '{s}' not found\n", .{ version, platform_str });
             return;
         },
         else => return err,
     };
     std.debug.print("Download URL: {s}\n", .{tarball_url});
     
-    const home = std.posix.getenv("HOME") orelse return error.NoHomeDir;
-    const bin_dir = try std.fs.path.join(allocator, &.{ home, "bin" });
+    const bin_dir = try Platform.getBinDir(allocator);
     defer allocator.free(bin_dir);
     
     std.fs.cwd().makePath(bin_dir) catch |err| switch (err) {
         error.AccessDenied => {
-            std.debug.print("Error: Cannot create {s}. Please run: sudo chown {s}:{s} {s}\n", .{ bin_dir, std.posix.getenv("USER") orelse "user", std.posix.getenv("USER") orelse "user", bin_dir });
+            const platform = Platform.current();
+            const instructions = switch (platform.os) {
+                .windows => "Please check directory permissions or run as Administrator",
+                else => std.fmt.allocPrint(allocator, "Please run: sudo chown {s}:{s} {s}", .{ std.posix.getenv("USER") orelse "user", std.posix.getenv("USER") orelse "user", bin_dir }) catch "Please fix directory permissions",
+            };
+            std.debug.print("Error: Cannot create {s}. {s}\n", .{ bin_dir, instructions });
             return;
         },
         else => return err,
@@ -71,7 +75,7 @@ pub fn run(allocator: std.mem.Allocator, args: []const []const u8) !void {
     
     try validation.validateVersionString(version);
     
-    const version_dir = try std.fs.path.join(allocator, &.{ bin_dir, version });
+    const version_dir = try Platform.getInstallDir(allocator, version);
     defer allocator.free(version_dir);
     
     
@@ -106,7 +110,7 @@ pub fn run(allocator: std.mem.Allocator, args: []const []const u8) !void {
     };
     
     std.debug.print("Extracting to {s}...\n", .{version_dir});
-    fs_utils.extractTarXz(allocator, archive_path, version_dir) catch |err| {
+    fs_utils.extractArchive(allocator, archive_path, version_dir) catch |err| {
         std.debug.print("Error: Extraction failed: {}\n", .{err});
         return;
     };
@@ -246,23 +250,3 @@ fn isValidPublicKey(key: []const u8) bool {
 }
 
 
-/// Detect current platform for appropriate Zig download selection
-fn detectPlatform(allocator: std.mem.Allocator) ![]const u8 {
-    const builtin = @import("builtin");
-    const arch = switch (builtin.cpu.arch) {
-        .x86_64 => "x86_64",
-        .aarch64 => "aarch64",
-        .arm => "arm",
-        else => return error.UnsupportedArchitecture,
-    };
-    
-    const os = switch (builtin.os.tag) {
-        .linux => "linux",
-        .macos => "macos", 
-        .windows => "windows",
-        .freebsd => "freebsd",
-        else => return error.UnsupportedOS,
-    };
-    
-    return try std.fmt.allocPrint(allocator, "{s}-{s}", .{ arch, os });
-}

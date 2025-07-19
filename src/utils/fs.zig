@@ -1,9 +1,21 @@
 const std = @import("std");
+const builtin = @import("builtin");
 
 /// Create a symbolic link, replacing any existing link at the target path
 pub fn createSymlink(target: []const u8, link_path: []const u8) !void {
     std.fs.cwd().deleteFile(link_path) catch {};
     try std.posix.symlink(target, link_path);
+}
+
+/// Extract an archive (tar.xz or zip) to the specified destination directory
+pub fn extractArchive(allocator: std.mem.Allocator, archive_path: []const u8, destination: []const u8) !void {
+    if (std.mem.endsWith(u8, archive_path, ".zip")) {
+        try extractZip(allocator, archive_path, destination);
+    } else if (std.mem.endsWith(u8, archive_path, ".tar.xz")) {
+        try extractTarXz(allocator, archive_path, destination);
+    } else {
+        return error.UnsupportedArchiveFormat;
+    }
 }
 
 /// Extract a tar.xz archive to the specified destination directory using native Zig implementation
@@ -41,6 +53,84 @@ pub fn extractTarXz(allocator: std.mem.Allocator, archive_path: []const u8, dest
     
     // Extract TAR with path traversal protection
     try extractTarWithValidation(allocator, dest_dir, decompressor.reader());
+}
+
+/// Extract a ZIP archive to the specified destination directory
+pub fn extractZip(allocator: std.mem.Allocator, archive_path: []const u8, destination: []const u8) !void {
+    // Create destination directory
+    std.fs.cwd().makePath(destination) catch |err| switch (err) {
+        error.AccessDenied => {
+            const instructions = switch (builtin.os.tag) {
+                .windows => "Please check directory permissions or run as Administrator",
+                else => "Please fix directory permissions or run: sudo chown -R $USER:$USER ~/bin",
+            };
+            std.debug.print("Error: Permission denied creating directory: {s}\n", .{destination});
+            std.debug.print("{s}\n", .{instructions});
+            return error.AccessDenied;
+        },
+        else => return err,
+    };
+    
+    // Open ZIP file
+    const file = std.fs.cwd().openFile(archive_path, .{}) catch |err| {
+        std.debug.print("Error: Failed to open ZIP archive: {}\n", .{err});
+        return err;
+    };
+    defer file.close();
+    
+    // Open destination directory
+    const dest_dir = std.fs.cwd().openDir(destination, .{}) catch |err| {
+        std.debug.print("Error: Failed to open destination directory: {}\n", .{err});
+        return err;
+    };
+    
+    // Extract ZIP with path traversal protection
+    try extractZipWithValidation(allocator, dest_dir, file);
+}
+
+/// Extract ZIP archive with path traversal validation
+fn extractZipWithValidation(allocator: std.mem.Allocator, dest_dir: std.fs.Dir, file: std.fs.File) !void {
+    var zip = std.zip.Iterator.init(file.reader()) catch |err| {
+        std.debug.print("Error: Failed to initialize ZIP reader: {}\n", .{err});
+        return err;
+    };
+    
+    while (try zip.next()) |entry| {
+        // Validate the entry path for security
+        const safe_path = try validateAndSanitizePath(allocator, entry.name);
+        defer allocator.free(safe_path);
+        
+        // Skip if path is unsafe
+        if (safe_path.len == 0) {
+            std.debug.print("Warning: Skipping unsafe path in archive: {s}\n", .{entry.name});
+            continue;
+        }
+        
+        if (entry.kind == .file) {
+            // Create any necessary parent directories
+            if (std.fs.path.dirname(safe_path)) |parent_dir| {
+                dest_dir.makePath(parent_dir) catch {};
+            }
+            
+            // Create and write the file
+            const dest_file = try dest_dir.createFile(safe_path, .{});
+            defer dest_file.close();
+            
+            var buf: [8192]u8 = undefined;
+            while (true) {
+                const bytes_read = try entry.reader().read(&buf);
+                if (bytes_read == 0) break;
+                try dest_file.writeAll(buf[0..bytes_read]);
+            }
+            
+            // Set executable bit if needed (Unix only)
+            if (builtin.os.tag != .windows and (std.mem.endsWith(u8, safe_path, "zig") or std.mem.endsWith(u8, safe_path, ".exe"))) {
+                dest_file.chmod(0o755) catch {};
+            }
+        } else if (entry.kind == .directory) {
+            dest_dir.makePath(safe_path) catch {};
+        }
+    }
 }
 
 /// Extract TAR archive with path traversal validation
@@ -81,8 +171,8 @@ fn extractTarWithValidation(allocator: std.mem.Allocator, dest_dir: std.fs.Dir, 
                     try file.writeAll(buf[0..bytes_read]);
                 }
                 
-                // Set executable bit if needed (basic implementation)
-                if (std.mem.endsWith(u8, safe_path, "zig")) {
+                // Set executable bit if needed (Unix only)
+                if (builtin.os.tag != .windows and std.mem.endsWith(u8, safe_path, "zig")) {
                     file.chmod(0o755) catch {};
                 }
             },

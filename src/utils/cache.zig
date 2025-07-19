@@ -1,7 +1,7 @@
 const std = @import("std");
+const Platform = @import("platform.zig").Platform;
 
 /// Get the cache directory path for storing version data
 pub fn getCacheDir(allocator: std.mem.Allocator) ![]u8 {
-    const home = std.posix.getenv("HOME") orelse return error.NoHomeDir;
-    return try std.fs.path.join(allocator, &.{ home, ".cache", "zigup" });
+    return Platform.getCacheDir(allocator);
 }
