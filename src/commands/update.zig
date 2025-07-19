@@ -1,6 +1,6 @@
 const std = @import("std");
-const zap = @import("zap");
 const zimdjson = @import("zimdjson");
+const cache_utils = @import("../utils/cache.zig");
 
 /// Fetch and cache the latest Zig version index from ziglang.org
 pub fn run(allocator: std.mem.Allocator, args: []const []const u8) !void {
@@ -26,7 +26,7 @@ pub fn run(allocator: std.mem.Allocator, args: []const []const u8) !void {
     const body = try req.reader().readAllAlloc(allocator, 1024 * 1024);
     defer allocator.free(body);
     
-    const cache_dir = try getCacheDir(allocator);
+    const cache_dir = try cache_utils.getCacheDir(allocator);
     defer allocator.free(cache_dir);
     
     const cache_file = try std.fs.path.join(allocator, &.{ cache_dir, "index.json" });
@@ -40,7 +40,7 @@ pub fn run(allocator: std.mem.Allocator, args: []const []const u8) !void {
 
 /// Display available Zig versions from cache
 pub fn showCachedVersions(allocator: std.mem.Allocator) !void {
-    const cache_dir = try getCacheDir(allocator);
+    const cache_dir = try cache_utils.getCacheDir(allocator);
     defer allocator.free(cache_dir);
     
     const cache_file = try std.fs.path.join(allocator, &.{ cache_dir, "index.json" });
@@ -73,8 +73,3 @@ pub fn showCachedVersions(allocator: std.mem.Allocator) !void {
     }
 }
 
-/// Get the cache directory path for storing version data
-fn getCacheDir(allocator: std.mem.Allocator) ![]u8 {
-    const home = std.posix.getenv("HOME") orelse return error.NoHomeDir;
-    return try std.fs.path.join(allocator, &.{ home, ".cache", "zigup" });
-}
