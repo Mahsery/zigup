@@ -10,7 +10,7 @@ A fast, simple version manager for the Zig programming language, written in Zig 
 - 💾 **Persistent cache** - Offline version listing after initial fetch
 - 🎯 **Auto-install** - `zigup default nightly` installs if not present
 - 🛡️ **Error recovery** - Clear error messages, no cryptic stack traces
-- 🔐 **Cryptographic verification** - Minisign signature verification for all downloads
+- 🔐 **Cryptographic verification** - Native minisign signature verification for all downloads
 
 ## Quick Start
 
@@ -43,10 +43,6 @@ zigup update list
 - Zig 0.14.1 or later
 - Internet connection for downloads
 - `tar` command (for extraction)
-- `minisign` command (for cryptographic verification)
-  - Ubuntu/Debian: `sudo apt install minisign`
-  - macOS: `brew install minisign`
-  - Arch Linux: `sudo pacman -S minisign`
 
 ### Build from Source
 ```bash

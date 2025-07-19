@@ -2,6 +2,7 @@ const std = @import("std");
 const zimdjson = @import("zimdjson");
 const fs_utils = @import("../utils/fs.zig");
 const cache_utils = @import("../utils/cache.zig");
+const minisign = @import("../utils/minisign.zig");
 
 /// Download and install a specific Zig version
 pub fn run(allocator: std.mem.Allocator, args: []const []const u8) !void {
@@ -94,7 +95,7 @@ pub fn run(allocator: std.mem.Allocator, args: []const []const u8) !void {
     };
     
     std.debug.print("Verifying signature...\n", .{});
-    verifyMinisign(allocator, archive_path, signature_path) catch |err| {
+    verifyMinisignNative(allocator, archive_path, signature_path) catch |err| {
         std.debug.print("Error: Signature verification failed: {}\n", .{err});
         std.fs.cwd().deleteFile(archive_path) catch {};
         std.fs.cwd().deleteFile(signature_path) catch {};
@@ -113,8 +114,8 @@ pub fn run(allocator: std.mem.Allocator, args: []const []const u8) !void {
     std.debug.print("Successfully installed Zig version: {s}\n", .{version});
 }
 
-/// Verify minisign signature using Zig team's public key
-fn verifyMinisign(allocator: std.mem.Allocator, file_path: []const u8, signature_path: []const u8) !void {
+/// Verify minisign signature using native Zig implementation
+fn verifyMinisignNative(allocator: std.mem.Allocator, file_path: []const u8, signature_path: []const u8) !void {
     const cache_dir = try cache_utils.getCacheDir(allocator);
     defer allocator.free(cache_dir);
     
@@ -128,26 +129,11 @@ fn verifyMinisign(allocator: std.mem.Allocator, file_path: []const u8, signature
     };
     defer allocator.free(pubkey);
     
-    var process = std.process.Child.init(&[_][]const u8{
-        "minisign", "-Vm", file_path, "-P", pubkey, "-x", signature_path
-    }, allocator);
-    
-    const result = process.spawnAndWait() catch |err| {
-        std.debug.print("Error: Failed to run minisign command. Is minisign installed?\n", .{});
-        std.debug.print("Install with: sudo apt install minisign (Ubuntu/Debian) or brew install minisign (macOS)\n", .{});
+    // Use our native minisign verification
+    minisign.verifyFile(allocator, file_path, signature_path, pubkey) catch |err| {
+        std.debug.print("Error: Native signature verification failed: {}\n", .{err});
         return err;
     };
-    
-    switch (result) {
-        .Exited => |code| if (code != 0) {
-            std.debug.print("Error: Signature verification failed. This download may be compromised.\n", .{});
-            return error.SignatureVerificationFailed;
-        },
-        else => {
-            std.debug.print("Error: minisign command terminated unexpectedly\n", .{});
-            return error.SignatureVerificationFailed;
-        },
-    }
 }
 
 /// Download and cache Zig's minisign public key from the download page
