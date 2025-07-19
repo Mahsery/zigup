@@ -1,6 +1,7 @@
 const std = @import("std");
 const zimdjson = @import("zimdjson");
 const fs_utils = @import("../utils/fs.zig");
+const cache_utils = @import("../utils/cache.zig");
 
 /// Download and install a specific Zig version
 pub fn run(allocator: std.mem.Allocator, args: []const []const u8) !void {
@@ -12,7 +13,7 @@ pub fn run(allocator: std.mem.Allocator, args: []const []const u8) !void {
     const version = args[0];
     std.debug.print("Installing Zig version: {s}\n", .{version});
     
-    const cache_dir = try getCacheDir(allocator);
+    const cache_dir = try cache_utils.getCacheDir(allocator);
     defer allocator.free(cache_dir);
     
     const cache_file = try std.fs.path.join(allocator, &.{ cache_dir, "index.json" });
@@ -33,7 +34,8 @@ pub fn run(allocator: std.mem.Allocator, args: []const []const u8) !void {
     var json_slice = std.io.fixedBufferStream(json_data);
     const document = try parser.parseFromReader(allocator, json_slice.reader().any());
     
-    const platform = try detectPlatform();
+    const platform = try detectPlatform(allocator);
+    defer allocator.free(platform);
     std.debug.print("Detected platform: {s}\n", .{platform});
     
     const version_key = if (std.mem.eql(u8, version, "master") or std.mem.eql(u8, version, "nightly"))
@@ -90,14 +92,9 @@ pub fn run(allocator: std.mem.Allocator, args: []const []const u8) !void {
     std.debug.print("Successfully installed Zig version: {s}\n", .{version});
 }
 
-/// Get the cache directory path for storing version data
-fn getCacheDir(allocator: std.mem.Allocator) ![]u8 {
-    const home = std.posix.getenv("HOME") orelse return error.NoHomeDir;
-    return try std.fs.path.join(allocator, &.{ home, ".cache", "zigup" });
-}
 
 /// Detect current platform for appropriate Zig download selection
-fn detectPlatform() ![]const u8 {
+fn detectPlatform(allocator: std.mem.Allocator) ![]const u8 {
     const builtin = @import("builtin");
     const arch = switch (builtin.cpu.arch) {
         .x86_64 => "x86_64",
@@ -114,5 +111,5 @@ fn detectPlatform() ![]const u8 {
         else => return error.UnsupportedOS,
     };
     
-    return try std.fmt.allocPrint(std.heap.page_allocator, "{s}-{s}", .{ arch, os });
+    return try std.fmt.allocPrint(allocator, "{s}-{s}", .{ arch, os });
 }
