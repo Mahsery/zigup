@@ -1,0 +1,82 @@
+name: Auto Version Bump
+
+on:
+  push:
+    branches: [ master ]
+
+jobs:
+  version-bump:
+    runs-on: ubuntu-latest
+    if: "!contains(github.event.head_commit.message, '[skip version]') && !contains(github.event.head_commit.message, 'bump:')"
+    
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        token: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Setup Git
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+    
+    - name: Determine version bump type
+      id: bump_type
+      run: |
+        if [[ "${{ github.event.head_commit.message }}" == release:* ]]; then
+          echo "type=release" >> $GITHUB_OUTPUT
+          echo "level=$(echo '${{ github.event.head_commit.message }}' | sed 's/release: *//')" >> $GITHUB_OUTPUT
+        else
+          echo "type=dev" >> $GITHUB_OUTPUT
+        fi
+    
+    - name: Get current version
+      id: current_version
+      run: |
+        VERSION=$(cat src/version)
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+    
+    - name: Bump version
+      id: bump_version
+      run: |
+        CURRENT="${{ steps.current_version.outputs.version }}"
+        
+        if [[ "${{ steps.bump_type.outputs.type }}" == "release" ]]; then
+          # Release version
+          BASE_VERSION=$(echo "$CURRENT" | cut -d'-' -f1)
+          IFS='.' read -r major minor patch <<< "$BASE_VERSION"
+          
+          LEVEL="${{ steps.bump_type.outputs.level }}"
+          case $LEVEL in
+            major) NEW_VERSION="$((major + 1)).0.0" ;;
+            minor) NEW_VERSION="$major.$((minor + 1)).0" ;;
+            *) NEW_VERSION="$major.$minor.$((patch + 1))" ;;
+          esac
+        else
+          # Dev version
+          COMMIT_COUNT=$(git rev-list --count HEAD)
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          
+          if [[ "$CURRENT" == *"-dev"* ]]; then
+            BASE_VERSION=$(echo "$CURRENT" | cut -d'-' -f1)
+          else
+            BASE_VERSION="$CURRENT"
+          fi
+          
+          NEW_VERSION="$BASE_VERSION-dev.$COMMIT_COUNT+g$SHORT_SHA"
+        fi
+        
+        echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+        echo "$NEW_VERSION" > src/version
+    
+    - name: Commit and tag
+      run: |
+        git add src/version
+        if [[ "${{ steps.bump_type.outputs.type }}" == "release" ]]; then
+          git commit -m "bump: release ${{ steps.bump_type.outputs.level }}"
+        else
+          git commit -m "bump: dev build"
+        fi
+        git tag "v${{ steps.bump_version.outputs.new_version }}"
+        git push origin master
+        git push origin "v${{ steps.bump_version.outputs.new_version }}"
