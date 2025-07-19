@@ -40,10 +40,6 @@
             .url = "git+https://github.com/EzequielRamis/zimdjson#aa22af403d769fb8c70c6c529389b1977f5cd558",
             .hash = "zimdjson-0.1.1-89pgxaJFBgDKSY1ppWxDVyPOBsGtYPBTdEs0p1XQkjFR",
         },
-        .zap = .{
-            .url = "git+https://github.com/zigzap/zap#ec7cac6f6ab8e1892fe6fc499fd37cd93f7b2256",
-            .hash = "zap-0.9.1-GoeB85JTJAADY1vAnA4lTuU66t6JJiuhGos5ex6CpifA",
-        },
     },
     .paths = .{
         "build.zig",

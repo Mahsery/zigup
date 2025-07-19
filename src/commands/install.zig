@@ -32,10 +32,7 @@ pub fn run(allocator: std.mem.Allocator, args: []const []const u8) !void {
     const version = args[0];
     std.debug.print("Installing Zig version: {s}\n", .{version});
     
-    const cache_dir = try cache_utils.getCacheDir(allocator);
-    defer allocator.free(cache_dir);
-    
-    const cache_file = try std.fs.path.join(allocator, &.{ cache_dir, "index.json" });
+    const cache_file = try cache_utils.getIndexCacheFile(allocator);
     defer allocator.free(cache_file);
     
     const json_data = std.fs.cwd().readFileAlloc(allocator, cache_file, 1024 * 1024) catch |err| switch (err) {
@@ -98,6 +95,8 @@ pub fn run(allocator: std.mem.Allocator, args: []const []const u8) !void {
     const version_dir = try Platform.getInstallDir(allocator, version);
     defer allocator.free(version_dir);
     
+    const cache_dir = try cache_utils.getCacheDir(allocator);
+    defer allocator.free(cache_dir);
     
     const archive_name = std.fs.path.basename(tarball_url);
     const archive_path = try std.fs.path.join(allocator, &.{ cache_dir, archive_name });
@@ -141,10 +140,7 @@ pub fn run(allocator: std.mem.Allocator, args: []const []const u8) !void {
 
 /// Verify minisign signature using native Zig implementation
 fn verifyMinisignNative(allocator: std.mem.Allocator, file_path: []const u8, signature_path: []const u8) !void {
-    const cache_dir = try cache_utils.getCacheDir(allocator);
-    defer allocator.free(cache_dir);
-    
-    const pubkey_path = try std.fs.path.join(allocator, &.{ cache_dir, "zig.pub" });
+    const pubkey_path = try cache_utils.getPublicKeyCacheFile(allocator);
     defer allocator.free(pubkey_path);
     
     // Download the public key from Zig download page if not cached

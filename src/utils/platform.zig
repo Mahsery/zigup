@@ -27,6 +27,13 @@ pub const Platform = struct {
         };
     }
     
+    /// Get base binary directory (~/bin) for version installations
+    pub fn getBinBaseDir(allocator: std.mem.Allocator) ![]u8 {
+        const home = try getHomeDirAlloc(allocator);
+        defer allocator.free(home);
+        return try std.fs.path.join(allocator, &.{ home, "bin" });
+    }
+    
     /// Get platform-specific binary directory for symlinks/wrappers
     pub fn getBinDir(allocator: std.mem.Allocator) ![]u8 {
         const home = try getHomeDirAlloc(allocator);
@@ -134,19 +141,51 @@ pub const Platform = struct {
             .windows => switch (builtin.cpu.arch) {
                 .x86_64 => "x86_64-windows",
                 .aarch64 => "aarch64-windows",
-                else => "x86_64-windows", // fallback
+                .x86 => {
+                    std.debug.print("Warning: 32-bit Windows not officially supported, using x86_64-windows\n", .{});
+                    return "x86_64-windows";
+                },
+                else => {
+                    std.debug.print("Warning: Unsupported Windows architecture '{}', using x86_64-windows\n", .{builtin.cpu.arch});
+                    return "x86_64-windows";
+                },
             },
             .linux => switch (builtin.cpu.arch) {
                 .x86_64 => "x86_64-linux",
                 .aarch64 => "aarch64-linux",
-                else => "x86_64-linux", // fallback
+                .riscv64 => {
+                    std.debug.print("Warning: RISC-V support limited, using x86_64-linux\n", .{});
+                    return "x86_64-linux";
+                },
+                .x86 => {
+                    std.debug.print("Warning: 32-bit Linux not officially supported, using x86_64-linux\n", .{});
+                    return "x86_64-linux";
+                },
+                else => {
+                    std.debug.print("Warning: Unsupported Linux architecture '{}', using x86_64-linux\n", .{builtin.cpu.arch});
+                    return "x86_64-linux";
+                },
             },
             .macos => switch (builtin.cpu.arch) {
                 .x86_64 => "x86_64-macos",
                 .aarch64 => "aarch64-macos",
-                else => "x86_64-macos", // fallback
+                else => {
+                    std.debug.print("Warning: Unsupported macOS architecture '{}', using x86_64-macos\n", .{builtin.cpu.arch});
+                    return "x86_64-macos";
+                },
             },
-            else => "x86_64-linux", // fallback for unknown platforms
+            .freebsd => {
+                std.debug.print("Warning: FreeBSD not officially supported, using x86_64-linux\n", .{});
+                return "x86_64-linux";
+            },
+            .openbsd => {
+                std.debug.print("Warning: OpenBSD not officially supported, using x86_64-linux\n", .{});
+                return "x86_64-linux";
+            },
+            else => {
+                std.debug.print("Warning: Unsupported OS '{}', using x86_64-linux\n", .{builtin.os.tag});
+                return "x86_64-linux";
+            },
         };
     }
 };

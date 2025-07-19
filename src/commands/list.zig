@@ -5,9 +5,7 @@ const Platform = @import("../utils/platform.zig").Platform;
 pub fn run(allocator: std.mem.Allocator, args: []const []const u8) !void {
     _ = args;
     
-    const home = try Platform.getHomeDirAlloc(allocator);
-    defer allocator.free(home);
-    const bin_dir = try std.fs.path.join(allocator, &.{ home, "bin" });
+    const bin_dir = try Platform.getBinBaseDir(allocator);
     defer allocator.free(bin_dir);
     
     var dir = std.fs.cwd().openDir(bin_dir, .{ .iterate = true }) catch |err| switch (err) {

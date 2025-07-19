@@ -7,7 +7,6 @@ pub fn build(b: *std.Build) void {
 
     const clap = b.dependency("clap", .{});
     const zimdjson = b.dependency("zimdjson", .{});
-    const zap = b.dependency("zap", .{});
 
     const exe = b.addExecutable(.{
         .name = "zigup",
@@ -18,7 +17,6 @@ pub fn build(b: *std.Build) void {
 
     exe.root_module.addImport("clap", clap.module("clap"));
     exe.root_module.addImport("zimdjson", zimdjson.module("zimdjson"));
-    exe.root_module.addImport("zap", zap.module("zap"));
 
     b.installArtifact(exe);
 

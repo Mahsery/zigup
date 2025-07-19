@@ -31,7 +31,7 @@ pub fn run(allocator: std.mem.Allocator, args: []const []const u8) !void {
     const cache_dir = try cache_utils.getCacheDir(allocator);
     defer allocator.free(cache_dir);
     
-    const cache_file = try std.fs.path.join(allocator, &.{ cache_dir, "index.json" });
+    const cache_file = try cache_utils.getIndexCacheFile(allocator);
     defer allocator.free(cache_file);
     
     try std.fs.cwd().makePath(cache_dir);
@@ -45,7 +45,7 @@ pub fn showCachedVersions(allocator: std.mem.Allocator) !void {
     const cache_dir = try cache_utils.getCacheDir(allocator);
     defer allocator.free(cache_dir);
     
-    const cache_file = try std.fs.path.join(allocator, &.{ cache_dir, "index.json" });
+    const cache_file = try cache_utils.getIndexCacheFile(allocator);
     defer allocator.free(cache_file);
     
     const json_data = std.fs.cwd().readFileAlloc(allocator, cache_file, 1024 * 1024) catch |err| switch (err) {
