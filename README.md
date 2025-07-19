@@ -160,6 +160,8 @@ zigup update
 - **zimdjson**: High-performance JSON parsing  
 - **zap**: HTTP networking (currently minimal usage)
 
+All cryptographic verification is handled natively using Zig's standard library (Ed25519 + Blake2b512).
+
 ### Building
 ```bash
 # Debug build
