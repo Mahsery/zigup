@@ -78,12 +78,19 @@ pub const Platform = struct {
                 try std.fs.cwd().writeFile(.{ .sub_path = wrapper_path, .data = wrapper_content });
             },
             else => {
-                // Use symlink on Unix systems
-                if (std.fs.cwd().readLink(link_path, &[_]u8{})) |_| {
-                    try std.fs.cwd().deleteFile(link_path);
-                } else |_| {}
+                // Use atomic symlink replacement on Unix systems to prevent TOCTOU attacks
+                const temp_link = try std.fmt.allocPrint(allocator, "{s}.tmp.{d}", .{ link_path, std.time.milliTimestamp() });
+                defer allocator.free(temp_link);
                 
-                try std.posix.symlink(version_path, link_path);
+                // Create symlink with temporary name first
+                try std.posix.symlink(version_path, temp_link);
+                
+                // Atomically replace the old symlink
+                std.fs.cwd().rename(temp_link, link_path) catch |err| {
+                    // Clean up temp link if rename fails
+                    std.fs.cwd().deleteFile(temp_link) catch {};
+                    return err;
+                };
             },
         }
     }

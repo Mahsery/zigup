@@ -150,11 +150,16 @@ fn extractZipWithValidation(allocator: std.mem.Allocator, dest_dir: std.fs.Dir, 
 
 /// Extract TAR archive with path traversal validation
 fn extractTarWithValidation(allocator: std.mem.Allocator, dest_dir: std.fs.Dir, reader: anytype) !void {
-    var file_name_buffer: [256]u8 = undefined;
-    var link_name_buffer: [256]u8 = undefined;
+    // Use dynamic allocation to prevent buffer overflow
+    const max_path_len = 4096; // Reasonable maximum path length
+    const file_name_buffer = try allocator.alloc(u8, max_path_len);
+    defer allocator.free(file_name_buffer);
+    const link_name_buffer = try allocator.alloc(u8, max_path_len);
+    defer allocator.free(link_name_buffer);
+    
     var tar_iterator = std.tar.iterator(reader, .{
-        .file_name_buffer = &file_name_buffer,
-        .link_name_buffer = &link_name_buffer,
+        .file_name_buffer = file_name_buffer,
+        .link_name_buffer = link_name_buffer,
     });
     
     while (try tar_iterator.next()) |entry| {

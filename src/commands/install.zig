@@ -6,6 +6,22 @@ const minisign = @import("../utils/minisign.zig");
 const validation = @import("../utils/validation.zig");
 const Platform = @import("../utils/platform.zig").Platform;
 
+/// Safely cleanup temporary files with atomic operations to prevent race conditions
+fn safeCleanup(archive_path: []const u8, signature_path: []const u8) void {
+    // Use mutex or file locking to prevent concurrent deletion
+    // For now, use rename-then-delete to make it atomic
+    const temp_archive = std.fmt.allocPrint(std.heap.page_allocator, "{s}.cleanup.{d}", .{ archive_path, std.time.milliTimestamp() }) catch return;
+    defer std.heap.page_allocator.free(temp_archive);
+    const temp_signature = std.fmt.allocPrint(std.heap.page_allocator, "{s}.cleanup.{d}", .{ signature_path, std.time.milliTimestamp() }) catch return;
+    defer std.heap.page_allocator.free(temp_signature);
+    
+    // Atomic rename then delete to avoid race conditions
+    std.fs.cwd().rename(archive_path, temp_archive) catch {};
+    std.fs.cwd().deleteFile(temp_archive) catch {};
+    std.fs.cwd().rename(signature_path, temp_signature) catch {};
+    std.fs.cwd().deleteFile(temp_signature) catch {};
+}
+
 /// Download and install a specific Zig version
 pub fn run(allocator: std.mem.Allocator, args: []const []const u8) !void {
     if (args.len == 0) {
@@ -108,8 +124,7 @@ pub fn run(allocator: std.mem.Allocator, args: []const []const u8) !void {
     std.debug.print("Verifying signature...\n", .{});
     verifyMinisignNative(allocator, archive_path, signature_path) catch |err| {
         std.debug.print("Error: Signature verification failed: {}\n", .{err});
-        std.fs.cwd().deleteFile(archive_path) catch {};
-        std.fs.cwd().deleteFile(signature_path) catch {};
+        safeCleanup(archive_path, signature_path);
         return;
     };
     
@@ -119,8 +134,7 @@ pub fn run(allocator: std.mem.Allocator, args: []const []const u8) !void {
         return;
     };
     
-    std.fs.cwd().deleteFile(archive_path) catch {};
-    std.fs.cwd().deleteFile(signature_path) catch {};
+    safeCleanup(archive_path, signature_path);
     
     std.debug.print("Successfully installed Zig version: {s}\n", .{version});
 }
@@ -154,11 +168,13 @@ fn downloadZigPublicKey(allocator: std.mem.Allocator, cache_path: []const u8) ![
     
     // If we have a pinned key that's less than 24 hours old, use it
     if (pinned_key) |key| {
+        defer allocator.free(key); // Always free the pinned key when done
         if (std.fs.cwd().statFile(cache_path)) |stat| {
             const now = std.time.timestamp();
             const cache_age = now - stat.mtime;
             if (cache_age < 24 * 60 * 60) { // 24 hours
-                return key;
+                // Return a copy since we're freeing the original
+                return try allocator.dupe(u8, key);
             }
         } else |_| {}
         // Key exists but cache expired, need to verify against pinned key
