@@ -1,5 +1,3 @@
-.zig-cache
-zig-out
-build_log.txt
-CLAUDE.md
-TODO.md
+# Zig build artifacts
+.zig-cache/
+zig-out/

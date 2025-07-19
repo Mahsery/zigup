@@ -7,6 +7,7 @@ const update = @import("commands/update.zig");
 const list = @import("commands/list.zig");
 const install = @import("commands/install.zig");
 const default = @import("commands/default.zig");
+const remove = @import("commands/remove.zig");
 const validation = @import("utils/validation.zig");
 
 const params = clap.parseParamsComptime(
@@ -39,18 +40,19 @@ pub fn main() !void {
     defer res.deinit();
 
     if (res.args.help != 0) {
-        try clap.help(std.io.getStdErr().writer(), clap.Help, &params, .{});
+        try showHelp();
         return;
     }
 
     if (res.args.version != 0) {
-        try std.io.getStdOut().writer().print("zigup 0.1.0\n", .{});
+        const version = @embedFile("version");
+        try std.io.getStdOut().writer().print("zigup {s}\n", .{std.mem.trim(u8, version, " \n\r\t")});
         return;
     }
 
     if (res.positionals[0].len == 0) {
-        try std.io.getStdErr().writer().print("Error: No command provided\n", .{});
-        try clap.help(std.io.getStdErr().writer(), clap.Help, &params, .{});
+        try std.io.getStdErr().writer().print("Error: No command provided\n\n", .{});
+        try showHelp();
         return;
     }
 
@@ -58,8 +60,8 @@ pub fn main() !void {
     const args = res.positionals[0][1..];
     
     validateCommand(command) catch {
-        try std.io.getStdErr().writer().print("Error: Unknown command '{s}'\n", .{command});
-        try clap.help(std.io.getStdErr().writer(), clap.Help, &params, .{});
+        try std.io.getStdErr().writer().print("Error: Unknown command '{s}'\n\n", .{command});
+        try showHelp();
         return;
     };
     validateArguments(args) catch {
@@ -79,14 +81,40 @@ pub fn main() !void {
         try install.run(allocator, args);
     } else if (std.mem.eql(u8, command, "default")) {
         try default.run(allocator, args);
+    } else if (std.mem.eql(u8, command, "remove")) {
+        try remove.run(allocator, args);
     } else {
-        try std.io.getStdErr().writer().print("Error: Unknown command '{s}'\n", .{command});
-        try clap.help(std.io.getStdErr().writer(), clap.Help, &params, .{});
+        try std.io.getStdErr().writer().print("Error: Unknown command '{s}'\n\n", .{command});
+        try showHelp();
     }
 }
 
+fn showHelp() !void {
+    const stdout = std.io.getStdOut().writer();
+    const version = @embedFile("version");
+    try stdout.print("ZigUp - Zig Version Manager v{s}\n\n", .{std.mem.trim(u8, version, " \n\r\t")});
+    try stdout.print("USAGE:\n", .{});
+    try stdout.print("    zigup [OPTIONS] <COMMAND> [ARGS]\n\n", .{});
+    try stdout.print("OPTIONS:\n", .{});
+    try stdout.print("    -h, --help       Display this help and exit\n", .{});
+    try stdout.print("    -v, --version    Display version and exit\n\n", .{});
+    try stdout.print("COMMANDS:\n", .{});
+    try stdout.print("    update           Fetch and cache version information\n", .{});
+    try stdout.print("    update list      Show cached available versions\n", .{});
+    try stdout.print("    list             Show installed Zig versions\n", .{});
+    try stdout.print("    install <ver>    Download and install a Zig version\n", .{});
+    try stdout.print("    default <ver>    Set default Zig version (auto-installs if needed)\n", .{});
+    try stdout.print("    remove <ver>     Remove an installed Zig version\n\n", .{});
+    try stdout.print("EXAMPLES:\n", .{});
+    try stdout.print("    zigup update\n", .{});
+    try stdout.print("    zigup install 0.14.1\n", .{});
+    try stdout.print("    zigup default nightly\n", .{});
+    try stdout.print("    zigup list\n", .{});
+    try stdout.print("    zigup remove 0.13.0\n", .{});
+}
+
 fn validateCommand(command: []const u8) !void {
-    const valid_commands = [_][]const u8{ "update", "list", "install", "default" };
+    const valid_commands = [_][]const u8{ "update", "list", "install", "default", "remove" };
     for (valid_commands) |valid_cmd| {
         if (std.mem.eql(u8, command, valid_cmd)) return;
     }
