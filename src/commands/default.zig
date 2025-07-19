@@ -1,5 +1,6 @@
 const std = @import("std");
 const install = @import("install.zig");
+const validation = @import("../utils/validation.zig");
 
 /// Set a Zig version as the system default, installing it if necessary
 pub fn run(allocator: std.mem.Allocator, args: []const []const u8) !void {
@@ -9,8 +10,10 @@ pub fn run(allocator: std.mem.Allocator, args: []const []const u8) !void {
     }
     
     const version = args[0];
+    try validation.validateVersionString(version);
     
     const home = std.posix.getenv("HOME") orelse return error.NoHomeDir;
+    try validation.validateEnvironmentPath(home);
     const version_path = try std.fs.path.join(allocator, &.{ home, "bin", version, "zig" });
     defer allocator.free(version_path);
     

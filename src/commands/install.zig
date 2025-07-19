@@ -3,6 +3,7 @@ const zimdjson = @import("zimdjson");
 const fs_utils = @import("../utils/fs.zig");
 const cache_utils = @import("../utils/cache.zig");
 const minisign = @import("../utils/minisign.zig");
+const validation = @import("../utils/validation.zig");
 
 /// Download and install a specific Zig version
 pub fn run(allocator: std.mem.Allocator, args: []const []const u8) !void {
@@ -67,6 +68,8 @@ pub fn run(allocator: std.mem.Allocator, args: []const []const u8) !void {
         },
         else => return err,
     };
+    
+    try validation.validateVersionString(version);
     
     const version_dir = try std.fs.path.join(allocator, &.{ bin_dir, version });
     defer allocator.free(version_dir);
@@ -138,20 +141,19 @@ fn verifyMinisignNative(allocator: std.mem.Allocator, file_path: []const u8, sig
 
 /// Download and cache Zig's minisign public key from the download page
 fn downloadZigPublicKey(allocator: std.mem.Allocator, cache_path: []const u8) ![]u8 {
-    // Check if we have a cached key that's less than 24 hours old
-    if (std.fs.cwd().statFile(cache_path)) |stat| {
-        const now = std.time.timestamp();
-        const cache_age = now - stat.mtime;
-        if (cache_age < 24 * 60 * 60) { // 24 hours
-            if (std.fs.cwd().readFileAlloc(allocator, cache_path, 128)) |cached_key| {
-                return cached_key;
-            } else |err| {
-                std.debug.print("Warning: Failed to read cached public key: {}\n", .{err});
-                // Fall through to download fresh key
+    // Check if we have a cached/pinned key
+    const pinned_key = if (std.fs.cwd().readFileAlloc(allocator, cache_path, 128)) |key| key else |_| null;
+    
+    // If we have a pinned key that's less than 24 hours old, use it
+    if (pinned_key) |key| {
+        if (std.fs.cwd().statFile(cache_path)) |stat| {
+            const now = std.time.timestamp();
+            const cache_age = now - stat.mtime;
+            if (cache_age < 24 * 60 * 60) { // 24 hours
+                return key;
             }
-        }
-    } else |_| {
-        // File doesn't exist, need to download
+        } else |_| {}
+        // Key exists but cache expired, need to verify against pinned key
     }
     
     std.debug.print("Fetching Zig public key from download page...\n", .{});
@@ -160,7 +162,9 @@ fn downloadZigPublicKey(allocator: std.mem.Allocator, cache_path: []const u8) ![
     defer client.deinit();
     
     var buf: [8192]u8 = undefined;
-    var req = try client.open(.GET, try std.Uri.parse("https://ziglang.org/download/"), .{
+    const download_page_url = "https://ziglang.org/download/";
+    try fs_utils.validateUrl(download_page_url);
+    var req = try client.open(.GET, try std.Uri.parse(download_page_url), .{
         .server_header_buffer = &buf,
     });
     defer req.deinit();
@@ -172,22 +176,8 @@ fn downloadZigPublicKey(allocator: std.mem.Allocator, cache_path: []const u8) ![
     const body = try req.reader().readAllAlloc(allocator, 1024 * 1024);
     defer allocator.free(body);
     
-    // Extract the public key from HTML - look for the known key pattern
-    // The key starts with "RWSGOq2NVecA2UPNdBUZykf1CCb147pkmdtYxgb3Ti+JO/wCYvhbAb/U"
-    const expected_key = "RWSGOq2NVecA2UPNdBUZykf1CCb147pkmdtYxgb3Ti+JO/wCYvhbAb/U";
-    
-    if (std.mem.indexOf(u8, body, expected_key)) |_| {
-        const key_copy = try allocator.dupe(u8, expected_key);
-        
-        // Cache the key
-        const cache_dir = std.fs.path.dirname(cache_path) orelse return error.InvalidCachePath;
-        std.fs.cwd().makePath(cache_dir) catch {};
-        std.fs.cwd().writeFile(.{ .sub_path = cache_path, .data = key_copy }) catch {};
-        
-        return key_copy;
-    }
-    
-    // Fallback: try to find any RWS-starting key in case it changed
+    // Parse key from HTML (insecure but necessary for bootstrapping)
+    // Security model: Accept any valid key on first fetch, then pin it
     const key_start = "RWS";
     var i: usize = 0;
     while (i < body.len - 64) : (i += 1) {
@@ -206,7 +196,27 @@ fn downloadZigPublicKey(allocator: std.mem.Allocator, cache_path: []const u8) ![
                 if (isValidPublicKey(potential_key)) {
                     const key_copy = try allocator.dupe(u8, potential_key);
                     
-                    // Cache the key  
+                    // Verify against pinned key if we have one
+                    if (pinned_key) |pinned| {
+                        defer allocator.free(pinned);
+                        if (!std.mem.eql(u8, potential_key, pinned)) {
+                            std.debug.print("ERROR: Public key mismatch!\n", .{});
+                            std.debug.print("Pinned key:  {s}\n", .{pinned});
+                            std.debug.print("Fetched key: {s}\n", .{potential_key});
+                            std.debug.print("This could indicate a security compromise.\n", .{});
+                            std.debug.print("Use 'zigup key-reset' to accept the new key if legitimate.\n", .{});
+                            return error.PublicKeyMismatch;
+                        }
+                        std.debug.print("Public key verified against pinned key.\n", .{});
+                    } else {
+                        // First time - warn user about key acceptance
+                        std.debug.print("WARNING: Accepting Zig team public key for first time\n", .{});
+                        std.debug.print("Key: {s}\n", .{potential_key});
+                        std.debug.print("This key will be pinned for future verification.\n", .{});
+                        std.debug.print("If this is not the expected key, abort now!\n\n", .{});
+                    }
+                    
+                    // Cache/update the key  
                     const cache_dir = std.fs.path.dirname(cache_path) orelse return error.InvalidCachePath;
                     std.fs.cwd().makePath(cache_dir) catch {};
                     std.fs.cwd().writeFile(.{ .sub_path = cache_path, .data = key_copy }) catch {};

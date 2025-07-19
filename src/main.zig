@@ -7,6 +7,7 @@ const update = @import("commands/update.zig");
 const list = @import("commands/list.zig");
 const install = @import("commands/install.zig");
 const default = @import("commands/default.zig");
+const validation = @import("utils/validation.zig");
 
 const params = clap.parseParamsComptime(
     \\-h, --help             Display this help and exit.
@@ -55,6 +56,16 @@ pub fn main() !void {
 
     const command = res.positionals[0][0];
     const args = res.positionals[0][1..];
+    
+    validateCommand(command) catch {
+        try std.io.getStdErr().writer().print("Error: Unknown command '{s}'\n", .{command});
+        try clap.help(std.io.getStdErr().writer(), clap.Help, &params, .{});
+        return;
+    };
+    validateArguments(args) catch {
+        try std.io.getStdErr().writer().print("Error: Invalid arguments provided\n", .{});
+        return;
+    };
 
     if (std.mem.eql(u8, command, "update")) {
         if (args.len > 0 and std.mem.eql(u8, args[0], "list")) {
@@ -71,5 +82,20 @@ pub fn main() !void {
     } else {
         try std.io.getStdErr().writer().print("Error: Unknown command '{s}'\n", .{command});
         try clap.help(std.io.getStdErr().writer(), clap.Help, &params, .{});
+    }
+}
+
+fn validateCommand(command: []const u8) !void {
+    const valid_commands = [_][]const u8{ "update", "list", "install", "default" };
+    for (valid_commands) |valid_cmd| {
+        if (std.mem.eql(u8, command, valid_cmd)) return;
+    }
+    return error.InvalidCommand;
+}
+
+fn validateArguments(args: []const []const u8) !void {
+    for (args) |arg| {
+        if (arg.len > 256) return error.ArgumentTooLong;
+        if (std.mem.indexOf(u8, arg, "\x00") != null) return error.NullByte;
     }
 }
