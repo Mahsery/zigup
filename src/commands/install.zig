@@ -81,6 +81,26 @@ pub fn run(allocator: std.mem.Allocator, args: []const []const u8) !void {
         return;
     };
     
+    // Download and verify minisign signature
+    const signature_url = try std.fmt.allocPrint(allocator, "{s}.minisig", .{tarball_url});
+    defer allocator.free(signature_url);
+    const signature_path = try std.fmt.allocPrint(allocator, "{s}.minisig", .{archive_path});
+    defer allocator.free(signature_path);
+    
+    std.debug.print("Downloading signature...\n", .{});
+    fs_utils.downloadFile(allocator, signature_url, signature_path) catch |err| {
+        std.debug.print("Error: Signature download failed: {}\n", .{err});
+        return;
+    };
+    
+    std.debug.print("Verifying signature...\n", .{});
+    verifyMinisign(allocator, archive_path, signature_path) catch |err| {
+        std.debug.print("Error: Signature verification failed: {}\n", .{err});
+        std.fs.cwd().deleteFile(archive_path) catch {};
+        std.fs.cwd().deleteFile(signature_path) catch {};
+        return;
+    };
+    
     std.debug.print("Extracting to {s}...\n", .{version_dir});
     fs_utils.extractTarXz(allocator, archive_path, version_dir) catch |err| {
         std.debug.print("Error: Extraction failed: {}\n", .{err});
@@ -88,8 +108,64 @@ pub fn run(allocator: std.mem.Allocator, args: []const []const u8) !void {
     };
     
     std.fs.cwd().deleteFile(archive_path) catch {};
+    std.fs.cwd().deleteFile(signature_path) catch {};
     
     std.debug.print("Successfully installed Zig version: {s}\n", .{version});
+}
+
+/// Verify minisign signature using Zig team's public key
+fn verifyMinisign(allocator: std.mem.Allocator, file_path: []const u8, signature_path: []const u8) !void {
+    const cache_dir = try cache_utils.getCacheDir(allocator);
+    defer allocator.free(cache_dir);
+    
+    const pubkey_path = try std.fs.path.join(allocator, &.{ cache_dir, "zig.pub" });
+    defer allocator.free(pubkey_path);
+    
+    // Download the public key if not cached or refresh it
+    std.debug.print("Fetching Zig public key...\n", .{});
+    fs_utils.downloadFile(allocator, "https://ziglang.org/download/index.json", pubkey_path) catch |err| {
+        std.debug.print("Error: Failed to fetch Zig public key: {}\n", .{err});
+        return err;
+    };
+    
+    // Extract public key from the downloaded JSON
+    const pubkey_data = std.fs.cwd().readFileAlloc(allocator, pubkey_path, 1024 * 1024) catch |err| {
+        std.debug.print("Error: Failed to read public key file: {}\n", .{err});
+        return err;
+    };
+    defer allocator.free(pubkey_data);
+    
+    const Parser = zimdjson.dom.StreamParser(.default);
+    var parser = Parser.init;
+    defer parser.deinit(allocator);
+    var json_slice = std.io.fixedBufferStream(pubkey_data);
+    const document = try parser.parseFromReader(allocator, json_slice.reader().any());
+    
+    const pubkey = document.at("minisign_public_key").asString() catch {
+        std.debug.print("Error: Could not find minisign_public_key in Zig download index\n", .{});
+        return error.PublicKeyNotFound;
+    };
+    
+    var process = std.process.Child.init(&[_][]const u8{
+        "minisign", "-Vm", file_path, "-P", pubkey, "-x", signature_path
+    }, allocator);
+    
+    const result = process.spawnAndWait() catch |err| {
+        std.debug.print("Error: Failed to run minisign command. Is minisign installed?\n", .{});
+        std.debug.print("Install with: sudo apt install minisign (Ubuntu/Debian) or brew install minisign (macOS)\n", .{});
+        return err;
+    };
+    
+    switch (result) {
+        .Exited => |code| if (code != 0) {
+            std.debug.print("Error: Signature verification failed. This download may be compromised.\n", .{});
+            return error.SignatureVerificationFailed;
+        },
+        else => {
+            std.debug.print("Error: minisign command terminated unexpectedly\n", .{});
+            return error.SignatureVerificationFailed;
+        },
+    }
 }
 
 
