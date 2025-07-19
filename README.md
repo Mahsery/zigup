@@ -176,7 +176,9 @@ zig build test
 
 ## License
 
-[Add your license here]
+MIT License - see [LICENSE](LICENSE) file for details.
+
+Copyright (c) 2025 Mehmet Muhammet Koseoglu <mehmet.kn94@gmail.com>
 
 ## Acknowledgments
 
