@@ -121,30 +121,12 @@ fn verifyMinisign(allocator: std.mem.Allocator, file_path: []const u8, signature
     const pubkey_path = try std.fs.path.join(allocator, &.{ cache_dir, "zig.pub" });
     defer allocator.free(pubkey_path);
     
-    // Download the public key if not cached or refresh it
-    std.debug.print("Fetching Zig public key...\n", .{});
-    fs_utils.downloadFile(allocator, "https://ziglang.org/download/index.json", pubkey_path) catch |err| {
+    // Download the public key from Zig download page if not cached
+    const pubkey = downloadZigPublicKey(allocator, pubkey_path) catch |err| {
         std.debug.print("Error: Failed to fetch Zig public key: {}\n", .{err});
         return err;
     };
-    
-    // Extract public key from the downloaded JSON
-    const pubkey_data = std.fs.cwd().readFileAlloc(allocator, pubkey_path, 1024 * 1024) catch |err| {
-        std.debug.print("Error: Failed to read public key file: {}\n", .{err});
-        return err;
-    };
-    defer allocator.free(pubkey_data);
-    
-    const Parser = zimdjson.dom.StreamParser(.default);
-    var parser = Parser.init;
-    defer parser.deinit(allocator);
-    var json_slice = std.io.fixedBufferStream(pubkey_data);
-    const document = try parser.parseFromReader(allocator, json_slice.reader().any());
-    
-    const pubkey = document.at("minisign_public_key").asString() catch {
-        std.debug.print("Error: Could not find minisign_public_key in Zig download index\n", .{});
-        return error.PublicKeyNotFound;
-    };
+    defer allocator.free(pubkey);
     
     var process = std.process.Child.init(&[_][]const u8{
         "minisign", "-Vm", file_path, "-P", pubkey, "-x", signature_path
@@ -166,6 +148,105 @@ fn verifyMinisign(allocator: std.mem.Allocator, file_path: []const u8, signature
             return error.SignatureVerificationFailed;
         },
     }
+}
+
+/// Download and cache Zig's minisign public key from the download page
+fn downloadZigPublicKey(allocator: std.mem.Allocator, cache_path: []const u8) ![]u8 {
+    // Check if we have a cached key that's less than 24 hours old
+    if (std.fs.cwd().statFile(cache_path)) |stat| {
+        const now = std.time.timestamp();
+        const cache_age = now - stat.mtime;
+        if (cache_age < 24 * 60 * 60) { // 24 hours
+            if (std.fs.cwd().readFileAlloc(allocator, cache_path, 128)) |cached_key| {
+                return cached_key;
+            } else |err| {
+                std.debug.print("Warning: Failed to read cached public key: {}\n", .{err});
+                // Fall through to download fresh key
+            }
+        }
+    } else |_| {
+        // File doesn't exist, need to download
+    }
+    
+    std.debug.print("Fetching Zig public key from download page...\n", .{});
+    
+    var client = std.http.Client{ .allocator = allocator };
+    defer client.deinit();
+    
+    var buf: [8192]u8 = undefined;
+    var req = try client.open(.GET, try std.Uri.parse("https://ziglang.org/download/"), .{
+        .server_header_buffer = &buf,
+    });
+    defer req.deinit();
+    
+    try req.send();
+    try req.finish();
+    try req.wait();
+    
+    const body = try req.reader().readAllAlloc(allocator, 1024 * 1024);
+    defer allocator.free(body);
+    
+    // Extract the public key from HTML - look for the known key pattern
+    // The key starts with "RWSGOq2NVecA2UPNdBUZykf1CCb147pkmdtYxgb3Ti+JO/wCYvhbAb/U"
+    const expected_key = "RWSGOq2NVecA2UPNdBUZykf1CCb147pkmdtYxgb3Ti+JO/wCYvhbAb/U";
+    
+    if (std.mem.indexOf(u8, body, expected_key)) |_| {
+        const key_copy = try allocator.dupe(u8, expected_key);
+        
+        // Cache the key
+        const cache_dir = std.fs.path.dirname(cache_path) orelse return error.InvalidCachePath;
+        std.fs.cwd().makePath(cache_dir) catch {};
+        std.fs.cwd().writeFile(.{ .sub_path = cache_path, .data = key_copy }) catch {};
+        
+        return key_copy;
+    }
+    
+    // Fallback: try to find any RWS-starting key in case it changed
+    const key_start = "RWS";
+    var i: usize = 0;
+    while (i < body.len - 64) : (i += 1) {
+        if (std.mem.startsWith(u8, body[i..], key_start)) {
+            var key_end = i;
+            // Find the end of the key (usually ends at whitespace or HTML)
+            while (key_end < body.len and key_end < i + 80) : (key_end += 1) {
+                switch (body[key_end]) {
+                    'A'...'Z', 'a'...'z', '0'...'9', '+', '/', '=' => {},
+                    else => break,
+                }
+            }
+            
+            if (key_end > i + 50) { // Reasonable key length
+                const potential_key = body[i..key_end];
+                if (isValidPublicKey(potential_key)) {
+                    const key_copy = try allocator.dupe(u8, potential_key);
+                    
+                    // Cache the key  
+                    const cache_dir = std.fs.path.dirname(cache_path) orelse return error.InvalidCachePath;
+                    std.fs.cwd().makePath(cache_dir) catch {};
+                    std.fs.cwd().writeFile(.{ .sub_path = cache_path, .data = key_copy }) catch {};
+                    
+                    return key_copy;
+                }
+            }
+        }
+    }
+    
+    return error.PublicKeyNotFound;
+}
+
+/// Validate that a string looks like a valid minisign public key
+fn isValidPublicKey(key: []const u8) bool {
+    if (key.len < 50 or key.len > 80) return false;
+    if (!std.mem.startsWith(u8, key, "RWS")) return false;
+    
+    // Check if it's valid base64-like characters
+    for (key) |c| {
+        switch (c) {
+            'A'...'Z', 'a'...'z', '0'...'9', '+', '/', '=' => {},
+            else => return false,
+        }
+    }
+    return true;
 }
 
 
