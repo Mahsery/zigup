@@ -30,8 +30,7 @@ pub fn build(b: *std.Build) void {
             "powershell", "-ExecutionPolicy", "Bypass", "-File", "install.ps1"
         }),
         else => b.addSystemCommand(&[_][]const u8{
-            "sh", "-c", 
-            \\mkdir -p ~/.local/bin && cp zig-out/bin/zigup ~/.local/bin/zigup && echo "zigup installed to ~/.local/bin/zigup"
+            "sh", "install-mac.sh"
         }),
     };
     

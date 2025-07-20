@@ -6,10 +6,7 @@ A version manager for the Zig programming language, written in Zig.
 
 ```bash
 # Build and install
-zig build install-zigup
-
-# Add to PATH
-export PATH="$HOME/.local/bin:$PATH"
+zig build -Doptimize=ReleaseFast install-zigup
 
 # Fetch versions and install
 zigup update
@@ -19,17 +16,38 @@ zigup default nightly
 ## Installation
 
 ### Prerequisites
-- Zig 0.14.1 or later
+- Zig 0.14.1 or later (recommended)
 - Internet connection
 
-### Build from Source
+### Build from Source (Recommended)
+
+If you have Zig installed:
 ```bash
-git clone <this-repo>
+git clone https://github.com/Mahsery/zigup.git
 cd zigup
-zig build install-zigup
+zig build -Doptimize=ReleaseFast install-zigup
 ```
 
-Add `~/.local/bin` to your PATH in your shell profile.
+### Bootstrap Installation (No Zig Binary)
+
+**Unix/Linux/macOS:**
+```bash
+git clone https://github.com/Mahsery/zigup.git
+cd zigup
+./install.sh
+# Script will offer to download Zig temporarily if not found
+```
+
+**Windows:**
+```powershell
+git clone https://github.com/Mahsery/zigup.git
+cd zigup
+.\install.ps1
+# Script will offer to download Zig temporarily and request admin privileges for PATH
+```
+
+**PATH Setup:**
+Both installation methods automatically add the binary directory to your PATH and update your shell configuration files.
 
 ## Commands
 
