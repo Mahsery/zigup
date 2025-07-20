@@ -232,7 +232,9 @@ fn validateAndSanitizePath(allocator: std.mem.Allocator, path: []const u8) ![]u8
     }
     
     // Strip the first component (equivalent to strip_components = 1)
-    var it = std.mem.splitScalar(u8, path, '/');
+    // Handle both forward and back slashes for cross-platform compatibility
+    const separator = if (std.mem.indexOf(u8, path, "\\") != null) '\\' else '/';
+    var it = std.mem.splitScalar(u8, path, separator);
     _ = it.first(); // Skip first component
     
     var sanitized = std.ArrayList(u8).init(allocator);
@@ -251,7 +253,7 @@ fn validateAndSanitizePath(allocator: std.mem.Allocator, path: []const u8) ![]u8
         }
         
         if (!first) {
-            try sanitized.append('/');
+            try sanitized.append('/'); // Always use forward slash in output for consistency
         }
         try sanitized.appendSlice(component);
         first = false;
