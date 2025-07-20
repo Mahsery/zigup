@@ -125,7 +125,8 @@ fn extractZipWithValidation(allocator: std.mem.Allocator, dest_dir: std.fs.Dir, 
         
         // Check if it's a directory (ends with '/')
         if (filename[filename.len - 1] == '/') {
-            dest_dir.makePath(safe_path[0..safe_path.len - 1]) catch {};
+            // Skip creating intermediate directories from archive - we only want the files
+            continue;
         } else {
             // Create any necessary parent directories
             if (std.fs.path.dirname(safe_path)) |parent_dir| {
@@ -197,7 +198,8 @@ fn extractTarWithValidation(allocator: std.mem.Allocator, dest_dir: std.fs.Dir, 
                 }
             },
             .directory => {
-                dest_dir.makePath(safe_path) catch {};
+                // Skip creating intermediate directories from archive - we only want the files
+                continue;
             },
             else => {
                 // Skip symlinks, devices, etc. for security
