@@ -82,19 +82,11 @@ pub fn run(allocator: std.mem.Allocator, args: []const []const u8) !void {
 
     try std.fs.cwd().makePath(bin_dir);
 
-    // Create or update the wrapper if it doesn't exist
-    const wrapper_path = try std.fs.path.join(allocator, &.{ bin_dir, "zig" });
-    defer allocator.free(wrapper_path);
-    
-    std.fs.cwd().access(wrapper_path, .{}) catch |err| switch (err) {
-        error.FileNotFound => {
-            try wrapper.createWrapper(allocator);
-        },
-        else => return err,
-    };
+    // Always create the wrapper (it will overwrite symlink if it exists)
+    try wrapper.createWrapper(allocator);
 
-    // Update the default symlink that the wrapper uses
-    try wrapper.updateDefaultCommand(allocator, version_path);
+    // Update the default version file that the wrapper uses  
+    try wrapper.updateDefaultCommand(allocator, version);
 
     std.debug.print("Default Zig version set to: {s}\n", .{version});
 

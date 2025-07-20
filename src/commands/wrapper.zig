@@ -65,6 +65,12 @@ fn createWindowsWrapper(allocator: std.mem.Allocator, wrapper_path: []const u8) 
 }
 
 fn createUnixWrapper(_: std.mem.Allocator, wrapper_path: []const u8) !void {
+    // Remove existing file/symlink first
+    std.fs.cwd().deleteFile(wrapper_path) catch |err| switch (err) {
+        error.FileNotFound => {}, // OK if file doesn't exist
+        else => return err,
+    };
+
     const wrapper_content = 
         \\#!/bin/bash
         \\
@@ -89,13 +95,17 @@ fn createUnixWrapper(_: std.mem.Allocator, wrapper_path: []const u8) !void {
         \\find_local_version "$@"
         \\
         \\# Use default zig if no local version found
-        \\default_zig="$HOME/.local/bin/zig-default"
-        \\if [[ -x "$default_zig" ]]; then
-        \\    exec "$default_zig" "$@"
-        \\else
-        \\    echo "Error: No default zig version set. Run 'zigup default <version>' first." >&2
-        \\    exit 1
+        \\default_version_file="$HOME/.local/bin/.zig-default-version"
+        \\if [[ -f "$default_version_file" ]]; then
+        \\    default_version=$(cat "$default_version_file" | tr -d ' \n\r\t')
+        \\    default_zig="$HOME/bin/$default_version/zig"
+        \\    if [[ -x "$default_zig" ]]; then
+        \\        exec "$default_zig" "$@"
+        \\    fi
         \\fi
+        \\
+        \\echo "Error: No default zig version set. Run 'zigup default <version>' first." >&2
+        \\exit 1
     ;
 
     try std.fs.cwd().writeFile(.{ .sub_path = wrapper_path, .data = wrapper_content });
@@ -106,13 +116,15 @@ fn createUnixWrapper(_: std.mem.Allocator, wrapper_path: []const u8) !void {
     try file.chmod(0o755);
 }
 
-/// Update the default command to use zig-default symlink instead of zig
-pub fn updateDefaultCommand(allocator: std.mem.Allocator, version_path: []const u8) !void {
+/// Update the default command to write version to file
+pub fn updateDefaultCommand(allocator: std.mem.Allocator, version: []const u8) !void {
     const bin_dir = try Platform.getBinDir(allocator);
     defer allocator.free(bin_dir);
 
-    const default_link_path = try std.fs.path.join(allocator, &.{ bin_dir, "zig-default" });
-    defer allocator.free(default_link_path);
+    const version_file_path = try std.fs.path.join(allocator, &.{ bin_dir, ".zig-default-version" });
+    defer allocator.free(version_file_path);
 
-    try Platform.createVersionLink(allocator, version_path, default_link_path);
+    const file = try std.fs.cwd().createFile(version_file_path, .{});
+    defer file.close();
+    try file.writeAll(version);
 }
