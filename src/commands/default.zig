@@ -1,6 +1,7 @@
 const std = @import("std");
 const install = @import("install.zig");
 const update = @import("update.zig");
+const wrapper = @import("wrapper.zig");
 const validation = @import("../utils/validation.zig");
 const Platform = @import("../utils/platform.zig").Platform;
 
@@ -81,10 +82,19 @@ pub fn run(allocator: std.mem.Allocator, args: []const []const u8) !void {
 
     try std.fs.cwd().makePath(bin_dir);
 
-    const link_path = try std.fs.path.join(allocator, &.{ bin_dir, "zig" });
-    defer allocator.free(link_path);
+    // Create or update the wrapper if it doesn't exist
+    const wrapper_path = try std.fs.path.join(allocator, &.{ bin_dir, "zig" });
+    defer allocator.free(wrapper_path);
+    
+    std.fs.cwd().access(wrapper_path, .{}) catch |err| switch (err) {
+        error.FileNotFound => {
+            try wrapper.createWrapper(allocator);
+        },
+        else => return err,
+    };
 
-    try Platform.createVersionLink(allocator, version_path, link_path);
+    // Update the default symlink that the wrapper uses
+    try wrapper.updateDefaultCommand(allocator, version_path);
 
     std.debug.print("Default Zig version set to: {s}\n", .{version});
 
