@@ -112,17 +112,19 @@ fn showHelp() !void {
     try stdout.print("    list             Show installed Zig versions\n", .{});
     try stdout.print("    install <ver>    Download and install a Zig version\n", .{});
     try stdout.print("    default <ver>    Set default Zig version (auto-installs if needed)\n", .{});
+    try stdout.print("    use <ver>        Set local Zig version for current project\n", .{});
     try stdout.print("    remove <ver>     Remove an installed Zig version\n\n", .{});
     try stdout.print("EXAMPLES:\n", .{});
     try stdout.print("    zigup update\n", .{});
     try stdout.print("    zigup install 0.14.1\n", .{});
     try stdout.print("    zigup default nightly\n", .{});
+    try stdout.print("    zigup use 0.14.1\n", .{});
     try stdout.print("    zigup list\n", .{});
     try stdout.print("    zigup remove 0.13.0\n", .{});
 }
 
 fn validateCommand(command: []const u8) !void {
-    const valid_commands = [_][]const u8{ "update", "list", "install", "default", "remove" };
+    const valid_commands = [_][]const u8{ "update", "list", "install", "default", "remove", "use" };
     for (valid_commands) |valid_cmd| {
         if (std.mem.eql(u8, command, valid_cmd)) return;
     }
