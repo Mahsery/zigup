@@ -8,6 +8,7 @@ const list = @import("commands/list.zig");
 const install = @import("commands/install.zig");
 const default = @import("commands/default.zig");
 const remove = @import("commands/remove.zig");
+const use = @import("commands/use.zig");
 const validation = @import("utils/validation.zig");
 
 const params = clap.parseParamsComptime(
@@ -88,6 +89,8 @@ pub fn main() !void {
         try default.run(allocator, args);
     } else if (std.mem.eql(u8, command, "remove")) {
         try remove.run(allocator, args);
+    } else if (std.mem.eql(u8, command, "use")) {
+        try use.run(allocator, args);
     } else {
         try std.io.getStdErr().writer().print("Error: Unknown command '{s}'\n\n", .{command});
         try showHelp();
