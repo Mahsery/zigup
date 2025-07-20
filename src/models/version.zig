@@ -5,7 +5,7 @@ pub const ZigVersion = struct {
     name: []const u8,
     date: []const u8,
     downloads: std.StringHashMap(Download),
-    
+
     /// Download metadata for a specific platform
     const Download = struct {
         tarball: []const u8,

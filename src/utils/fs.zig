@@ -29,14 +29,14 @@ pub fn extractTarXz(allocator: std.mem.Allocator, archive_path: []const u8, dest
         },
         else => return err,
     };
-    
+
     // Read compressed archive
     const compressed_data = std.fs.cwd().readFileAlloc(allocator, archive_path, 1024 * 1024 * 100) catch |err| {
         std.debug.print("Error: Failed to read archive file: {}\n", .{err});
         return err;
     };
     defer allocator.free(compressed_data);
-    
+
     // Decompress XZ stream
     var decompressed_stream = std.io.fixedBufferStream(compressed_data);
     var decompressor = std.compress.xz.decompress(allocator, decompressed_stream.reader()) catch |err| {
@@ -44,13 +44,13 @@ pub fn extractTarXz(allocator: std.mem.Allocator, archive_path: []const u8, dest
         return err;
     };
     defer decompressor.deinit();
-    
+
     // Open destination directory
     const dest_dir = std.fs.cwd().openDir(destination, .{}) catch |err| {
         std.debug.print("Error: Failed to open destination directory: {}\n", .{err});
         return err;
     };
-    
+
     // Extract TAR with path traversal protection
     try extractTarWithValidation(allocator, dest_dir, decompressor.reader());
 }
@@ -70,20 +70,20 @@ pub fn extractZip(allocator: std.mem.Allocator, archive_path: []const u8, destin
         },
         else => return err,
     };
-    
+
     // Open ZIP file
     const file = std.fs.cwd().openFile(archive_path, .{}) catch |err| {
         std.debug.print("Error: Failed to open ZIP archive: {}\n", .{err});
         return err;
     };
     defer file.close();
-    
+
     // Open destination directory
     const dest_dir = std.fs.cwd().openDir(destination, .{}) catch |err| {
         std.debug.print("Error: Failed to open destination directory: {}\n", .{err});
         return err;
     };
-    
+
     // Extract ZIP with path traversal protection
     try extractZipWithValidation(allocator, dest_dir, file);
 }
@@ -96,14 +96,14 @@ fn extractZipWithValidation(allocator: std.mem.Allocator, dest_dir: std.fs.Dir, 
         std.debug.print("Error: Failed to initialize ZIP reader: {}\n", .{err});
         return err;
     };
-    
+
     var filename_buf: [std.fs.max_path_bytes]u8 = undefined;
     while (try zip.next()) |entry| {
         if (entry.filename_len > filename_buf.len) {
             std.debug.print("Warning: Filename too long, skipping: {d} bytes\n", .{entry.filename_len});
             continue;
         }
-        
+
         // Read filename from ZIP entry
         try seekable_stream.seekTo(entry.header_zip_offset + @sizeOf(std.zip.CentralDirectoryFileHeader));
         const filename = filename_buf[0..entry.filename_len];
@@ -112,17 +112,17 @@ fn extractZipWithValidation(allocator: std.mem.Allocator, dest_dir: std.fs.Dir, 
             std.debug.print("Warning: Failed to read complete filename, skipping\n", .{});
             continue;
         }
-        
+
         // Validate the entry path for security
         const safe_path = try validateAndSanitizePath(allocator, filename);
         defer allocator.free(safe_path);
-        
+
         // Skip if path is unsafe
         if (safe_path.len == 0) {
             std.debug.print("Warning: Skipping unsafe path in archive: {s}\n", .{filename});
             continue;
         }
-        
+
         // Check if it's a directory (ends with '/')
         if (filename[filename.len - 1] == '/') {
             // Skip creating intermediate directories from archive - we only want the files
@@ -132,7 +132,7 @@ fn extractZipWithValidation(allocator: std.mem.Allocator, dest_dir: std.fs.Dir, 
             if (std.fs.path.dirname(safe_path)) |parent_dir| {
                 dest_dir.makePath(parent_dir) catch {};
             }
-            
+
             // Extract the file using the ZIP entry's extract method
             // Delete existing file first if it exists
             dest_dir.deleteFile(safe_path) catch {};
@@ -140,8 +140,8 @@ fn extractZipWithValidation(allocator: std.mem.Allocator, dest_dir: std.fs.Dir, 
             if (crc32 != entry.crc32) {
                 std.debug.print("Warning: CRC32 mismatch for file: {s}\n", .{filename});
             }
-            
-            // Set executable bit if needed (Unix only) 
+
+            // Set executable bit if needed (Unix only)
             if (builtin.os.tag != .windows and (std.mem.endsWith(u8, safe_path, "zig") or std.mem.endsWith(u8, safe_path, ".exe"))) {
                 const dest_file = dest_dir.openFile(safe_path, .{ .mode = .read_write }) catch continue;
                 defer dest_file.close();
@@ -159,44 +159,44 @@ fn extractTarWithValidation(allocator: std.mem.Allocator, dest_dir: std.fs.Dir, 
     defer allocator.free(file_name_buffer);
     const link_name_buffer = try allocator.alloc(u8, max_path_len);
     defer allocator.free(link_name_buffer);
-    
+
     var tar_iterator = std.tar.iterator(reader, .{
         .file_name_buffer = file_name_buffer,
         .link_name_buffer = link_name_buffer,
     });
-    
+
     while (try tar_iterator.next()) |entry| {
         // Validate the entry path for security
         const safe_path = try validateAndSanitizePath(allocator, entry.name);
         defer allocator.free(safe_path);
-        
+
         // Skip if path is unsafe
         if (safe_path.len == 0) {
             std.debug.print("Warning: Skipping unsafe path in archive: {s}\n", .{entry.name});
             continue;
         }
-        
+
         switch (entry.kind) {
             .file => {
                 // Create any necessary parent directories
                 if (std.fs.path.dirname(safe_path)) |parent_dir| {
                     dest_dir.makePath(parent_dir) catch {};
                 }
-                
+
                 // Create and write the file, overwriting if it exists
                 const file = dest_dir.createFile(safe_path, .{}) catch |err| switch (err) {
                     error.PathAlreadyExists => try dest_dir.createFile(safe_path, .{ .truncate = true }),
                     else => return err,
                 };
                 defer file.close();
-                
+
                 var buf: [8192]u8 = undefined;
                 while (true) {
                     const bytes_read = try entry.reader().readAll(&buf);
                     if (bytes_read == 0) break;
                     try file.writeAll(buf[0..bytes_read]);
                 }
-                
+
                 // Set executable bit if needed (Unix only)
                 if (builtin.os.tag != .windows and std.mem.endsWith(u8, safe_path, "zig")) {
                     file.chmod(0o755) catch {};
@@ -220,43 +220,43 @@ fn validateAndSanitizePath(allocator: std.mem.Allocator, path: []const u8) ![]u8
     if (std.fs.path.isAbsolute(path)) {
         return allocator.dupe(u8, ""); // Return empty string to indicate rejection
     }
-    
+
     // Reject paths with traversal attempts
     if (std.mem.indexOf(u8, path, "..") != null) {
         return allocator.dupe(u8, ""); // Return empty string to indicate rejection
     }
-    
+
     // Strip the first component (equivalent to strip_components = 1)
     // Handle both forward and back slashes for cross-platform compatibility
     const has_backslash = std.mem.indexOf(u8, path, "\\") != null;
-    var it = if (has_backslash) 
+    var it = if (has_backslash)
         std.mem.splitScalar(u8, path, '\\')
     else
         std.mem.splitScalar(u8, path, '/');
     _ = it.first(); // Skip first component
-    
+
     var sanitized = std.ArrayList(u8).init(allocator);
     defer sanitized.deinit();
-    
+
     var first = true;
     while (it.next()) |component| {
         // Skip empty components and single dots
         if (component.len == 0 or std.mem.eql(u8, component, ".")) {
             continue;
         }
-        
+
         // Reject any remaining traversal attempts
         if (std.mem.eql(u8, component, "..")) {
             return allocator.dupe(u8, ""); // Return empty string to indicate rejection
         }
-        
+
         if (!first) {
             try sanitized.append('/'); // Always use forward slash in output for consistency
         }
         try sanitized.appendSlice(component);
         first = false;
     }
-    
+
     return sanitized.toOwnedSlice();
 }
 
@@ -265,23 +265,23 @@ pub fn downloadFile(allocator: std.mem.Allocator, url: []const u8, destination: 
     try validateUrl(url);
     var client = std.http.Client{ .allocator = allocator };
     defer client.deinit();
-    
+
     var buf: [8192]u8 = undefined;
     var req = try client.open(.GET, try std.Uri.parse(url), .{
         .server_header_buffer = &buf,
     });
     defer req.deinit();
-    
+
     try req.send();
     try req.finish();
     try req.wait();
-    
+
     const file = try std.fs.cwd().createFile(destination, .{});
     defer file.close();
-    
+
     const writer = file.writer();
     var buf_reader = std.io.bufferedReader(req.reader());
-    
+
     var buffer: [8192]u8 = undefined;
     while (true) {
         const bytes_read = try buf_reader.reader().read(&buffer);
@@ -292,11 +292,11 @@ pub fn downloadFile(allocator: std.mem.Allocator, url: []const u8, destination: 
 
 pub fn validateUrl(url: []const u8) !void {
     const uri = std.Uri.parse(url) catch return error.InvalidUrl;
-    
+
     if (!std.mem.eql(u8, uri.scheme, "https")) {
         return error.UnsafeUrlScheme;
     }
-    
+
     if (uri.host) |host| {
         const host_str = switch (host) {
             .raw => |raw| raw,

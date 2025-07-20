@@ -58,7 +58,7 @@ pub fn main() !void {
 
     const command = res.positionals[0][0];
     const args = res.positionals[0][1..];
-    
+
     validateCommand(command) catch {
         try std.io.getStdErr().writer().print("Error: Unknown command '{s}'\n\n", .{command});
         try showHelp();

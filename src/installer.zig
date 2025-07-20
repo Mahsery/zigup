@@ -108,15 +108,15 @@ fn getLatestReleaseUrl(allocator: std.mem.Allocator, binary_name: []const u8) ![
     defer parser.deinit(allocator);
     var json_slice = std.io.fixedBufferStream(body);
     const document = try parser.parseFromReader(allocator, json_slice.reader().any());
-    
+
     // Get the first release from the releases array
     const releases_array = try document.asArray();
     var releases_iter = releases_array.iterator();
     const first_release = releases_iter.next() orelse return error.NoReleasesFound;
-    
+
     // Get the assets array from the first release
     const assets = first_release.at("assets");
-    
+
     // Look through each asset for our binary using iterator
     const assets_array = try assets.asArray();
     var iter = assets_array.iterator();
@@ -127,7 +127,7 @@ fn getLatestReleaseUrl(allocator: std.mem.Allocator, binary_name: []const u8) ![
             return try allocator.dupe(u8, download_url);
         }
     }
-    
+
     return error.BinaryNotFound;
 }
 
@@ -185,7 +185,7 @@ fn setupWindowsPath(install_dir: []const u8) !void {
     const allocator = arena.allocator();
 
     const setx_cmd = try std.fmt.allocPrint(allocator, "setx PATH \"{s};%PATH%\"", .{install_dir});
-    
+
     var process = std.process.Child.init(&[_][]const u8{ "cmd", "/c", setx_cmd }, allocator);
     process.stdout_behavior = .Ignore;
     process.stderr_behavior = .Ignore;
@@ -222,9 +222,9 @@ fn setupUnixPath(allocator: std.mem.Allocator, install_dir: []const u8) !void {
     defer allocator.free(shell);
 
     const shell_name = std.fs.path.basename(shell);
-    
+
     std.debug.print("To complete installation, add {s} to your PATH:\n\n", .{install_dir});
-    
+
     if (std.mem.eql(u8, shell_name, "fish")) {
         std.debug.print("Add to ~/.config/fish/config.fish:\n", .{});
         std.debug.print("  set -gx PATH {s} $PATH\n", .{install_dir});
@@ -233,6 +233,6 @@ fn setupUnixPath(allocator: std.mem.Allocator, install_dir: []const u8) !void {
         std.debug.print("Add to {s}:\n", .{config_file});
         std.debug.print("  export PATH=\"{s}:$PATH\"\n", .{install_dir});
     }
-    
+
     std.debug.print("\nThen restart your terminal or run: source <config-file>\n", .{});
 }
