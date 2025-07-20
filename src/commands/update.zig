@@ -69,7 +69,11 @@ pub fn getAvailableVersions(allocator: std.mem.Allocator) ![][]const u8 {
 
 /// Fetch and cache the latest Zig version index from ziglang.org
 pub fn run(allocator: std.mem.Allocator, args: []const []const u8) !void {
-    _ = args;
+    if (args.len > 0) {
+        std.debug.print("Error: 'zigup update' does not accept arguments\n", .{});
+        std.debug.print("Usage: zigup update\n", .{});
+        return;
+    }
     
     std.debug.print("Fetching Zig version information...\n", .{});
     

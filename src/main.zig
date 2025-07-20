@@ -71,6 +71,11 @@ pub fn main() !void {
 
     if (std.mem.eql(u8, command, "update")) {
         if (args.len > 0 and std.mem.eql(u8, args[0], "list")) {
+            if (args.len > 1) {
+                std.debug.print("Error: 'zigup update list' does not accept additional arguments\n", .{});
+                std.debug.print("Usage: zigup update list\n", .{});
+                return;
+            }
             try update.showCachedVersions(allocator);
         } else {
             try update.run(allocator, args);

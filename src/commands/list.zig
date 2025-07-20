@@ -3,7 +3,11 @@ const Platform = @import("../utils/platform.zig").Platform;
 
 /// List all locally installed Zig versions
 pub fn run(allocator: std.mem.Allocator, args: []const []const u8) !void {
-    _ = args;
+    if (args.len > 0) {
+        std.debug.print("Error: 'zigup list' does not accept arguments\n", .{});
+        std.debug.print("Usage: zigup list\n", .{});
+        return;
+    }
     
     const bin_dir = try Platform.getBinBaseDir(allocator);
     defer allocator.free(bin_dir);
