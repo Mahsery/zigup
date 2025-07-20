@@ -4,8 +4,14 @@
 # Check if running as administrator and request elevation if not
 if (-NOT ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
     Write-Host "Requesting administrator privileges to modify PATH..." -ForegroundColor Yellow
-    Start-Process PowerShell -Verb RunAs -ArgumentList "-ExecutionPolicy Bypass -File `"$PSCommandPath`""
-    exit
+    Write-Host "Please allow the UAC prompt to continue installation." -ForegroundColor Cyan
+    $process = Start-Process PowerShell -Verb RunAs -ArgumentList "-ExecutionPolicy Bypass -File `"$PSCommandPath`"" -PassThru -Wait
+    if ($process.ExitCode -eq 0) {
+        Write-Host "Installation completed successfully!" -ForegroundColor Green
+    } else {
+        Write-Host "Installation failed or was cancelled." -ForegroundColor Red
+    }
+    exit $process.ExitCode
 }
 
 Write-Host "Installing ZigUp for Windows..." -ForegroundColor Green
