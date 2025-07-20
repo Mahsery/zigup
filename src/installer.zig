@@ -1,5 +1,6 @@
 const std = @import("std");
 const builtin = @import("builtin");
+const zimdjson = @import("zimdjson");
 
 const GITHUB_RELEASES_URL = "https://api.github.com/repos/Mahsery/zigup/releases/latest";
 
@@ -101,28 +102,27 @@ fn getLatestReleaseUrl(allocator: std.mem.Allocator, binary_name: []const u8) ![
     const body = try req.reader().readAllAlloc(allocator, 1024 * 1024);
     defer allocator.free(body);
 
-    // Parse JSON to find download URL
-    // Simple string search for the binary name in assets
-    const search_pattern = try std.fmt.allocPrint(allocator, "\"browser_download_url\": \"https://github.com/Mahsery/zigup/releases/download/", .{});
-    defer allocator.free(search_pattern);
-
-    var start_idx: usize = 0;
-    while (std.mem.indexOf(u8, body[start_idx..], search_pattern)) |idx| {
-        start_idx += idx + search_pattern.len;
-        
-        // Find the end of the URL
-        if (std.mem.indexOf(u8, body[start_idx..], "\"")) |end_idx| {
-            const url_part = body[start_idx..start_idx + end_idx];
-            
-            // Check if this URL contains our binary name
-            if (std.mem.indexOf(u8, url_part, binary_name) != null) {
-                return try std.fmt.allocPrint(allocator, "https://github.com/Mahsery/zigup/releases/download/{s}", .{url_part});
-            }
+    // Parse JSON properly using zimdjson
+    const Parser = zimdjson.dom.StreamParser(.default);
+    var parser = Parser.init;
+    defer parser.deinit(allocator);
+    var json_slice = std.io.fixedBufferStream(body);
+    const document = try parser.parseFromReader(allocator, json_slice.reader().any());
+    
+    // Get the assets array from the release
+    const assets = document.at("assets");
+    
+    // Look through each asset for our binary using iterator
+    const assets_array = try assets.asArray();
+    var iter = assets_array.iterator();
+    while (iter.next()) |asset| {
+        const name = try asset.at("name").asString();
+        if (std.mem.eql(u8, name, binary_name)) {
+            const download_url = try asset.at("browser_download_url").asString();
+            return try allocator.dupe(u8, download_url);
         }
-        
-        start_idx += 1;
     }
-
+    
     return error.BinaryNotFound;
 }
 

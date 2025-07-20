@@ -29,6 +29,8 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    installer.root_module.addImport("zimdjson", zimdjson.module("zimdjson"));
+
     b.installArtifact(installer);
 
     // Install step for zigup (builds and runs installer)
