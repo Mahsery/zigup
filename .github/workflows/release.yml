@@ -96,7 +96,7 @@ jobs:
       id: create_release
       uses: actions/create-release@v1
       env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GITHUB_TOKEN: ${{ secrets.PERSONAL_TOKEN }}
       with:
         tag_name: ${{ github.ref }}
         release_name: ZigUp ${{ steps.version.outputs.version }}
@@ -129,7 +129,7 @@ jobs:
     - name: Upload zigup-linux
       uses: actions/upload-release-asset@v1
       env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GITHUB_TOKEN: ${{ secrets.PERSONAL_TOKEN }}
       with:
         upload_url: ${{ steps.create_release.outputs.upload_url }}
         asset_path: ./zigup-x86_64-linux/zigup-linux
@@ -139,7 +139,7 @@ jobs:
     - name: Upload zigup-macos
       uses: actions/upload-release-asset@v1
       env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GITHUB_TOKEN: ${{ secrets.PERSONAL_TOKEN }}
       with:
         upload_url: ${{ steps.create_release.outputs.upload_url }}
         asset_path: ./zigup-x86_64-macos/zigup-macos
@@ -149,7 +149,7 @@ jobs:
     - name: Upload zigup-macos-arm64
       uses: actions/upload-release-asset@v1
       env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GITHUB_TOKEN: ${{ secrets.PERSONAL_TOKEN }}
       with:
         upload_url: ${{ steps.create_release.outputs.upload_url }}
         asset_path: ./zigup-aarch64-macos/zigup-macos-arm64
@@ -159,7 +159,7 @@ jobs:
     - name: Upload zigup.exe
       uses: actions/upload-release-asset@v1
       env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GITHUB_TOKEN: ${{ secrets.PERSONAL_TOKEN }}
       with:
         upload_url: ${{ steps.create_release.outputs.upload_url }}
         asset_path: ./zigup-x86_64-windows/zigup.exe
@@ -170,7 +170,7 @@ jobs:
     - name: Upload zigup-installer-linux
       uses: actions/upload-release-asset@v1
       env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GITHUB_TOKEN: ${{ secrets.PERSONAL_TOKEN }}
       with:
         upload_url: ${{ steps.create_release.outputs.upload_url }}
         asset_path: ./installer-x86_64-linux/zigup-installer-linux
@@ -180,7 +180,7 @@ jobs:
     - name: Upload zigup-installer-macos
       uses: actions/upload-release-asset@v1
       env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GITHUB_TOKEN: ${{ secrets.PERSONAL_TOKEN }}
       with:
         upload_url: ${{ steps.create_release.outputs.upload_url }}
         asset_path: ./installer-x86_64-macos/zigup-installer-macos
@@ -190,7 +190,7 @@ jobs:
     - name: Upload zigup-installer-macos-arm64
       uses: actions/upload-release-asset@v1
       env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GITHUB_TOKEN: ${{ secrets.PERSONAL_TOKEN }}
       with:
         upload_url: ${{ steps.create_release.outputs.upload_url }}
         asset_path: ./installer-aarch64-macos/zigup-installer-macos-arm64
@@ -200,7 +200,7 @@ jobs:
     - name: Upload zigup-installer.exe
       uses: actions/upload-release-asset@v1
       env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GITHUB_TOKEN: ${{ secrets.PERSONAL_TOKEN }}
       with:
         upload_url: ${{ steps.create_release.outputs.upload_url }}
         asset_path: ./installer-x86_64-windows/zigup-installer.exe
