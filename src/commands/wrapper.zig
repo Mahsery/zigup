@@ -64,7 +64,7 @@ fn createWindowsWrapper(allocator: std.mem.Allocator, wrapper_path: []const u8) 
     try std.fs.cwd().writeFile(.{ .sub_path = bat_path, .data = wrapper_content });
 }
 
-fn createUnixWrapper(allocator: std.mem.Allocator, wrapper_path: []const u8) !void {
+fn createUnixWrapper(_: std.mem.Allocator, wrapper_path: []const u8) !void {
     const wrapper_content = 
         \\#!/bin/bash
         \\
