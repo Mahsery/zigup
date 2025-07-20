@@ -2,7 +2,7 @@ const std = @import("std");
 const builtin = @import("builtin");
 const zimdjson = @import("zimdjson");
 
-const GITHUB_RELEASES_URL = "https://api.github.com/repos/Mahsery/zigup/releases/latest";
+const GITHUB_RELEASES_URL = "https://api.github.com/repos/Mahsery/zigup/releases";
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -109,8 +109,13 @@ fn getLatestReleaseUrl(allocator: std.mem.Allocator, binary_name: []const u8) ![
     var json_slice = std.io.fixedBufferStream(body);
     const document = try parser.parseFromReader(allocator, json_slice.reader().any());
     
-    // Get the assets array from the release
-    const assets = document.at("assets");
+    // Get the first release from the releases array
+    const releases_array = try document.asArray();
+    var releases_iter = releases_array.iterator();
+    const first_release = releases_iter.next() orelse return error.NoReleasesFound;
+    
+    // Get the assets array from the first release
+    const assets = first_release.at("assets");
     
     // Look through each asset for our binary using iterator
     const assets_array = try assets.asArray();
