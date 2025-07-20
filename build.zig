@@ -8,6 +8,7 @@ pub fn build(b: *std.Build) void {
     const clap = b.dependency("clap", .{});
     const zimdjson = b.dependency("zimdjson", .{});
 
+    // Main zigup executable
     const exe = b.addExecutable(.{
         .name = "zigup",
         .root_source_file = b.path("src/main.zig"),
@@ -20,22 +21,21 @@ pub fn build(b: *std.Build) void {
 
     b.installArtifact(exe);
 
-    // Add cross-platform zigup install step
-    const install_zigup_step = b.step("install-zigup", "Install zigup to local bin directory");
-    
-    // Create cross-platform installation command
-    const builtin = @import("builtin");
-    const install_zigup_cmd = switch (builtin.os.tag) {
-        .windows => b.addSystemCommand(&[_][]const u8{
-            "powershell", "-ExecutionPolicy", "Bypass", "-File", "install.ps1"
-        }),
-        else => b.addSystemCommand(&[_][]const u8{
-            "sh", "install-mac.sh"
-        }),
-    };
-    
-    install_zigup_cmd.step.dependOn(b.getInstallStep());
-    install_zigup_step.dependOn(&install_zigup_cmd.step);
+    // Installer executable
+    const installer = b.addExecutable(.{
+        .name = "zigup-installer",
+        .root_source_file = b.path("src/installer.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    b.installArtifact(installer);
+
+    // Install step for zigup (builds and runs installer)
+    const install_zigup_step = b.step("install-zigup", "Build and run installer to install zigup");
+    const run_installer = b.addRunArtifact(installer);
+    run_installer.step.dependOn(b.getInstallStep());
+    install_zigup_step.dependOn(&run_installer.step);
 
     const run_step = b.step("run", "Run zigup");
     const run_cmd = b.addRunArtifact(exe);

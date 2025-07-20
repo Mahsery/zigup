@@ -15,11 +15,48 @@ zigup default nightly
 
 ## Installation
 
-### Prerequisites
-- Zig 0.14.1 or later (recommended)
-- Internet connection
+### Quick Install (Recommended)
 
-### Build from Source (Recommended)
+Download and run the installer for your platform:
+
+**Windows:**
+```powershell
+# Download and run installer
+Invoke-WebRequest -Uri "https://github.com/Mahsery/zigup/releases/latest/download/zigup-installer.exe" -OutFile "zigup-installer.exe"
+.\zigup-installer.exe
+```
+
+**Linux:**
+```bash
+# Download and run installer
+curl -L "https://github.com/Mahsery/zigup/releases/latest/download/zigup-installer-linux" -o zigup-installer
+chmod +x zigup-installer
+./zigup-installer
+```
+
+**macOS:**
+```bash
+# Intel Macs
+curl -L "https://github.com/Mahsery/zigup/releases/latest/download/zigup-installer-macos" -o zigup-installer
+chmod +x zigup-installer
+./zigup-installer
+
+# Apple Silicon Macs
+curl -L "https://github.com/Mahsery/zigup/releases/latest/download/zigup-installer-macos-arm64" -o zigup-installer
+chmod +x zigup-installer
+./zigup-installer
+```
+
+The installer automatically:
+- Downloads the latest zigup binary
+- Installs it to `~/.local/bin` (Unix) or `%USERPROFILE%\.local\bin` (Windows)
+- Sets up your PATH (Windows automatic, Unix provides instructions)
+
+### Manual Install
+
+Download the zigup binary directly from [releases](https://github.com/Mahsery/zigup/releases/latest) and add it to your PATH manually.
+
+### Build from Source
 
 If you have Zig installed:
 ```bash
@@ -27,27 +64,6 @@ git clone https://github.com/Mahsery/zigup.git
 cd zigup
 zig build -Doptimize=ReleaseFast install-zigup
 ```
-
-### Bootstrap Installation (No Zig Binary)
-
-**Unix/Linux/macOS:**
-```bash
-git clone https://github.com/Mahsery/zigup.git
-cd zigup
-./install.sh
-# Script will offer to download Zig temporarily if not found
-```
-
-**Windows:**
-```powershell
-git clone https://github.com/Mahsery/zigup.git
-cd zigup
-.\install.ps1
-# Script will offer to download Zig temporarily and request admin privileges for PATH
-```
-
-**PATH Setup:**
-Both installation methods automatically add the binary directory to your PATH and update your shell configuration files.
 
 ## Commands
 
