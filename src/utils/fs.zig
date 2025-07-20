@@ -133,8 +133,15 @@ fn extractZipWithValidation(allocator: std.mem.Allocator, dest_dir: std.fs.Dir, 
                 dest_dir.makePath(parent_dir) catch {};
             }
             
-            // Extract the file using the ZIP entry's extract method
-            const crc32 = try entry.extract(seekable_stream, .{}, &filename_buf, dest_dir);
+            // Extract the file using the ZIP entry's extract method, overwriting existing files
+            const crc32 = entry.extract(seekable_stream, .{ .overwrite = true }, &filename_buf, dest_dir) catch |err| switch (err) {
+                error.PathAlreadyExists => {
+                    // Delete existing file and try again
+                    dest_dir.deleteFile(safe_path) catch {};
+                    try entry.extract(seekable_stream, .{}, &filename_buf, dest_dir)
+                },
+                else => return err,
+            };
             if (crc32 != entry.crc32) {
                 std.debug.print("Warning: CRC32 mismatch for file: {s}\n", .{filename});
             }
@@ -181,8 +188,11 @@ fn extractTarWithValidation(allocator: std.mem.Allocator, dest_dir: std.fs.Dir, 
                     dest_dir.makePath(parent_dir) catch {};
                 }
                 
-                // Create and write the file
-                const file = try dest_dir.createFile(safe_path, .{});
+                // Create and write the file, overwriting if it exists
+                const file = dest_dir.createFile(safe_path, .{}) catch |err| switch (err) {
+                    error.PathAlreadyExists => try dest_dir.createFile(safe_path, .{ .truncate = true }),
+                    else => return err,
+                };
                 defer file.close();
                 
                 var buf: [8192]u8 = undefined;
