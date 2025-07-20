@@ -78,9 +78,16 @@ $tempZigDir = $null
 try {
     $zigCommand = Get-Command zig -ErrorAction Stop
     Write-Host "Found Zig compiler: $($zigCommand.Source)" -ForegroundColor Green
+    
+    # Test if zig actually works
+    $testResult = & zig version 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw "Zig command failed: $testResult"
+    }
+    Write-Host "Zig version: $testResult" -ForegroundColor Green
 }
 catch {
-    Write-Host "Zig compiler not found." -ForegroundColor Yellow
+    Write-Host "Zig compiler not found or not working: $_" -ForegroundColor Yellow
     Write-Host "Downloading Zig temporarily to build ZigUp..." -ForegroundColor Cyan
     $zigCommand = Setup-TempZig
     $tempZigDir = Split-Path $zigCommand -Parent
