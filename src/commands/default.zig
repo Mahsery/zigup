@@ -1,5 +1,6 @@
 const std = @import("std");
 const install = @import("install.zig");
+const update = @import("update.zig");
 const validation = @import("../utils/validation.zig");
 const Platform = @import("../utils/platform.zig").Platform;
 
@@ -12,6 +13,38 @@ pub fn run(allocator: std.mem.Allocator, args: []const []const u8) !void {
     
     const version = args[0];
     try validation.validateVersionString(version);
+    
+    // Check if version is available before proceeding
+    const is_available = update.isVersionAvailable(allocator, version) catch |err| switch (err) {
+        error.FileNotFound => false, // No cache file means run update first
+        else => return err,
+    };
+    
+    if (!is_available) {
+        std.debug.print("Error: Version '{s}' not found.\n\n", .{version});
+        
+        const available_versions = update.getAvailableVersions(allocator) catch |err| switch (err) {
+            else => {
+                std.debug.print("Run 'zigup update' to fetch available versions, then try again.\n", .{});
+                return;
+            },
+        };
+        defer {
+            for (available_versions) |v| allocator.free(v);
+            allocator.free(available_versions);
+        }
+        
+        if (available_versions.len == 0) {
+            std.debug.print("Run 'zigup update' to fetch available versions, then try again.\n", .{});
+            return;
+        }
+        
+        std.debug.print("Available versions:\n", .{});
+        for (available_versions) |available_version| {
+            std.debug.print("  {s}\n", .{available_version});
+        }
+        return;
+    }
     
     const home = try Platform.getHomeDirAlloc(allocator);
     defer allocator.free(home);
@@ -28,9 +61,15 @@ pub fn run(allocator: std.mem.Allocator, args: []const []const u8) !void {
     
     std.fs.cwd().access(version_path, .{}) catch |err| switch (err) {
         error.FileNotFound => {
-            std.debug.print("Version '{s}' not found. Installing...\n", .{version});
+            std.debug.print("Version '{s}' not found locally. Installing...\n", .{version});
             install.run(allocator, &[_][]const u8{version}) catch |install_err| {
                 std.debug.print("Error: Failed to install version '{s}': {}\n", .{ version, install_err });
+                return;
+            };
+            
+            // Verify installation was successful before creating symlink
+            std.fs.cwd().access(version_path, .{}) catch |verify_err| {
+                std.debug.print("Error: Installation failed, version '{s}' still not found: {}\n", .{ version, verify_err });
                 return;
             };
         },
