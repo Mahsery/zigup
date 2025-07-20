@@ -133,15 +133,10 @@ fn extractZipWithValidation(allocator: std.mem.Allocator, dest_dir: std.fs.Dir, 
                 dest_dir.makePath(parent_dir) catch {};
             }
             
-            // Extract the file using the ZIP entry's extract method, overwriting existing files
-            const crc32 = entry.extract(seekable_stream, .{ .overwrite = true }, &filename_buf, dest_dir) catch |err| switch (err) {
-                error.PathAlreadyExists => {
-                    // Delete existing file and try again
-                    dest_dir.deleteFile(safe_path) catch {};
-                    try entry.extract(seekable_stream, .{}, &filename_buf, dest_dir)
-                },
-                else => return err,
-            };
+            // Extract the file using the ZIP entry's extract method
+            // Delete existing file first if it exists
+            dest_dir.deleteFile(safe_path) catch {};
+            const crc32 = try entry.extract(seekable_stream, .{}, &filename_buf, dest_dir);
             if (crc32 != entry.crc32) {
                 std.debug.print("Warning: CRC32 mismatch for file: {s}\n", .{filename});
             }
@@ -233,8 +228,11 @@ fn validateAndSanitizePath(allocator: std.mem.Allocator, path: []const u8) ![]u8
     
     // Strip the first component (equivalent to strip_components = 1)
     // Handle both forward and back slashes for cross-platform compatibility
-    const separator = if (std.mem.indexOf(u8, path, "\\") != null) '\\' else '/';
-    var it = std.mem.splitScalar(u8, path, separator);
+    const has_backslash = std.mem.indexOf(u8, path, "\\") != null;
+    var it = if (has_backslash) 
+        std.mem.splitScalar(u8, path, '\\')
+    else
+        std.mem.splitScalar(u8, path, '/');
     _ = it.first(); // Skip first component
     
     var sanitized = std.ArrayList(u8).init(allocator);
