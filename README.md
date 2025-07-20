@@ -22,14 +22,14 @@ Download and run the installer for your platform:
 **Windows:**
 ```powershell
 # Download and run installer
-curl -L -o zigup-installer.exe "https://github.com/Mahsery/zigup/releases/download/v0.2.0-dev.44%2Bg02f8679/zigup-installer.exe"
+curl -L -o zigup-installer.exe "https://github.com/Mahsery/zigup/releases/latest/download/zigup-installer.exe"
 .\zigup-installer.exe
 ```
 
 **Linux:**
 ```bash
 # Download and run installer
-curl -L -o zigup-installer "https://github.com/Mahsery/zigup/releases/download/v0.2.0-dev.44%2Bg02f8679/zigup-installer-linux"
+curl -L -o zigup-installer "https://github.com/Mahsery/zigup/releases/latest/download/zigup-installer-linux"
 chmod +x zigup-installer
 ./zigup-installer
 ```
@@ -37,12 +37,12 @@ chmod +x zigup-installer
 **macOS:**
 ```bash
 # Intel Macs
-curl -L -o zigup-installer "https://github.com/Mahsery/zigup/releases/download/v0.2.0-dev.44%2Bg02f8679/zigup-installer-macos"
+curl -L -o zigup-installer "https://github.com/Mahsery/zigup/releases/latest/download/zigup-installer-macos"
 chmod +x zigup-installer
 ./zigup-installer
 
 # Apple Silicon Macs
-curl -L -o zigup-installer "https://github.com/Mahsery/zigup/releases/download/v0.2.0-dev.44%2Bg02f8679/zigup-installer-macos-arm64"
+curl -L -o zigup-installer "https://github.com/Mahsery/zigup/releases/latest/download/zigup-installer-macos-arm64"
 chmod +x zigup-installer
 ./zigup-installer
 ```
@@ -54,7 +54,7 @@ The installer automatically:
 
 ### Manual Install
 
-Download the zigup binary directly from [releases](https://github.com/Mahsery/zigup/releases) and add it to your PATH manually.
+Download the zigup binary directly from [releases](https://github.com/Mahsery/zigup/releases/latest) and add it to your PATH manually.
 
 ### Build from Source
 
