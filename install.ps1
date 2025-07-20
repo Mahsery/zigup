@@ -81,15 +81,9 @@ try {
 }
 catch {
     Write-Host "Zig compiler not found." -ForegroundColor Yellow
-    Write-Host "Would you like to download Zig temporarily to build ZigUp?" -ForegroundColor Cyan
-    $response = Read-Host "(y/N)"
-    if ($response -match "^[Yy]") {
-        $zigCommand = Setup-TempZig
-        $tempZigDir = Split-Path $zigCommand -Parent
-    } else {
-        Write-Host "Please install Zig first: https://ziglang.org/download/" -ForegroundColor Red
-        exit 1
-    }
+    Write-Host "Downloading Zig temporarily to build ZigUp..." -ForegroundColor Cyan
+    $zigCommand = Setup-TempZig
+    $tempZigDir = Split-Path $zigCommand -Parent
 }
 
 # Always build zigup (to update if already exists)
