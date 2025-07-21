@@ -91,6 +91,13 @@ pub fn main() !void {
         try remove.run(allocator, args);
     } else if (std.mem.eql(u8, command, "use")) {
         try use.run(allocator, args);
+    } else if (std.mem.eql(u8, command, "self")) {
+        if (args.len == 0 or !std.mem.eql(u8, args[0], "update")) {
+            std.debug.print("Error: 'self' requires 'update' subcommand\n", .{});
+            std.debug.print("Usage: zigup self update\n", .{});
+            return;
+        }
+        try selfUpdate(allocator);
     } else {
         try std.io.getStdErr().writer().print("Error: Unknown command '{s}'\n\n", .{command});
         try showHelp();
@@ -113,7 +120,8 @@ fn showHelp() !void {
     try stdout.print("    install <ver>    Download and install a Zig version\n", .{});
     try stdout.print("    default <ver>    Set default Zig version (auto-installs if needed)\n", .{});
     try stdout.print("    use <ver>        Set local Zig version for current project\n", .{});
-    try stdout.print("    remove <ver>     Remove an installed Zig version\n\n", .{});
+    try stdout.print("    remove <ver>     Remove an installed Zig version\n", .{});
+    try stdout.print("    self update      Update zigup to the latest version\n\n", .{});
     try stdout.print("EXAMPLES:\n", .{});
     try stdout.print("    zigup update\n", .{});
     try stdout.print("    zigup install 0.14.1\n", .{});
@@ -124,7 +132,7 @@ fn showHelp() !void {
 }
 
 fn validateCommand(command: []const u8) !void {
-    const valid_commands = [_][]const u8{ "update", "list", "install", "default", "remove", "use" };
+    const valid_commands = [_][]const u8{ "update", "list", "install", "default", "remove", "use", "self" };
     for (valid_commands) |valid_cmd| {
         if (std.mem.eql(u8, command, valid_cmd)) return;
     }
@@ -136,4 +144,103 @@ fn validateArguments(args: []const []const u8) !void {
         if (arg.len > 256) return error.ArgumentTooLong;
         if (std.mem.indexOf(u8, arg, "\x00") != null) return error.NullByte;
     }
+}
+
+fn selfUpdate(allocator: std.mem.Allocator) !void {
+    std.debug.print("Checking for zigup updates...\n", .{});
+    
+    var client = std.http.Client{ .allocator = allocator };
+    defer client.deinit();
+    
+    // Get latest release info from GitHub API
+    var buf: [8192]u8 = undefined;
+    const api_url = "https://api.github.com/repos/Mahsery/zigup/releases/latest";
+    var req = try client.open(.GET, try std.Uri.parse(api_url), .{
+        .server_header_buffer = &buf,
+    });
+    defer req.deinit();
+    
+    try req.send();
+    try req.finish();
+    try req.wait();
+    
+    const body = try req.reader().readAllAlloc(allocator, 1024 * 1024);
+    defer allocator.free(body);
+    
+    // Parse JSON to get tag name and download URL
+    const tag_name = try parseLatestTag(allocator, body);
+    defer allocator.free(tag_name);
+    
+    // Get current version
+    const current_version = @embedFile("version");
+    const current_trimmed = std.mem.trim(u8, current_version, " \n\r\t");
+    
+    if (std.mem.eql(u8, current_trimmed, tag_name)) {
+        std.debug.print("zigup is already up to date (version {s})\n", .{current_trimmed});
+        return;
+    }
+    
+    std.debug.print("New version available: {s} (current: {s})\n", .{tag_name, current_trimmed});
+    std.debug.print("Downloading update...\n", .{});
+    
+    // Determine platform-specific binary name
+    const platform_binary = getPlatformBinary();
+    const download_url = try std.fmt.allocPrint(allocator, "https://github.com/Mahsery/zigup/releases/latest/download/{s}", .{platform_binary});
+    defer allocator.free(download_url);
+    
+    // Download the new binary to a temp location
+    const temp_path = try std.fmt.allocPrint(allocator, "/tmp/zigup-{d}", .{std.time.milliTimestamp()});
+    defer allocator.free(temp_path);
+    
+    const fs_utils = @import("utils/fs.zig");
+    try fs_utils.downloadFile(allocator, download_url, temp_path);
+    
+    // Make it executable
+    const temp_file = try std.fs.cwd().openFile(temp_path, .{});
+    defer temp_file.close();
+    try temp_file.chmod(0o755);
+    
+    // Get current executable path
+    const exe_path = try std.process.getSelfExePath(allocator);
+    defer allocator.free(exe_path);
+    
+    // Replace current executable
+    try std.fs.cwd().copyFile(temp_path, std.fs.cwd(), exe_path, .{});
+    try std.fs.cwd().deleteFile(temp_path);
+    
+    std.debug.print("Successfully updated zigup to version {s}\n", .{tag_name});
+}
+
+fn parseLatestTag(allocator: std.mem.Allocator, json_body: []const u8) ![]u8 {
+    // Simple JSON parsing to extract tag_name
+    const tag_start = std.mem.indexOf(u8, json_body, "\"tag_name\":") orelse return error.TagNotFound;
+    const quote_start = std.mem.indexOf(u8, json_body[tag_start..], "\"") orelse return error.TagNotFound;
+    const value_start = tag_start + quote_start + 1;
+    const next_quote = std.mem.indexOf(u8, json_body[value_start..], "\"") orelse return error.TagNotFound;
+    const tag_name = json_body[value_start..value_start + next_quote];
+    
+    // Remove 'v' prefix if present
+    const clean_tag = if (std.mem.startsWith(u8, tag_name, "v")) tag_name[1..] else tag_name;
+    return try allocator.dupe(u8, clean_tag);
+}
+
+fn getPlatformBinary() []const u8 {
+    const builtin = @import("builtin");
+    return switch (builtin.os.tag) {
+        .linux => switch (builtin.cpu.arch) {
+            .x86_64 => "zigup-linux-x86_64",
+            .aarch64 => "zigup-linux-aarch64",
+            else => "zigup-linux-x86_64",
+        },
+        .macos => switch (builtin.cpu.arch) {
+            .x86_64 => "zigup-macos-x86_64",
+            .aarch64 => "zigup-macos-aarch64",
+            else => "zigup-macos-x86_64",
+        },
+        .windows => switch (builtin.cpu.arch) {
+            .x86_64 => "zigup-windows-x86_64.exe",
+            else => "zigup-windows-x86_64.exe",
+        },
+        else => "zigup-linux-x86_64",
+    };
 }
