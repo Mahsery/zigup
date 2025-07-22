@@ -4,6 +4,8 @@ const update = @import("update.zig");
 const wrapper = @import("wrapper.zig");
 const validation = @import("../utils/validation.zig");
 const Platform = @import("../utils/platform.zig").Platform;
+const Version = @import("../models/version_info.zig").Version;
+const ZigupError = @import("../utils/errors.zig").ZigupError;
 
 /// Set a Zig version as the system default, installing it if necessary
 pub fn run(allocator: std.mem.Allocator, args: []const []const u8) !void {
@@ -137,33 +139,47 @@ fn needsNightlyUpdate(allocator: std.mem.Allocator) !bool {
     const download_info = master_obj.at(platform_str);
     const latest_url = download_info.at("tarball").asString() catch return false;
     
-    // Extract version from URL (e.g., zig-x86_64-linux-0.15.0-dev.1175+e4abdf5a1.tar.xz)
-    const filename = std.fs.path.basename(latest_url);
-    const version_start = std.mem.indexOf(u8, filename, "0.") orelse return true;
-    const version_end = std.mem.indexOf(u8, filename[version_start..], ".tar") orelse return true;
-    const latest_version = filename[version_start..version_start + version_end];
+    // Parse latest version from URL using Version struct
+    const latest_version = Version.parse(allocator, latest_url) catch return true;
+    defer latest_version.deinit(allocator);
     
-    // Check if we have this version installed
+    // Get currently installed nightly version
+    const installed_version = getCurrentNightlyVersion(allocator) catch return true;
+    defer installed_version.deinit(allocator);
+    
+    // Compare versions - update if latest is newer
+    return latest_version.isNewerThan(installed_version);
+}
+
+fn getCurrentNightlyVersion(allocator: std.mem.Allocator) !Version {
     const version_dir = try Platform.getInstallDir(allocator, "nightly");
     defer allocator.free(version_dir);
     
-    // Check if the directory exists and contains the expected version
-    var dir = std.fs.cwd().openDir(version_dir, .{}) catch return true; // Dir doesn't exist, update needed
+    // Check if the directory exists and contains an installed version
+    var dir = std.fs.cwd().openDir(version_dir, .{}) catch {
+        // Return a very old version to trigger update
+        return Version{ .major = 0, .minor = 0, .patch = 0 };
+    };
     defer dir.close();
     
-    // Look for zig executable that matches the version
-    var walker = dir.walk(allocator) catch return true;
+    // Look for zig executable and extract version from directory name
+    var walker = dir.walk(allocator) catch {
+        return Version{ .major = 0, .minor = 0, .patch = 0 };
+    };
     defer walker.deinit();
     
     while (walker.next() catch null) |entry| {
         if (entry.kind == .file and std.mem.endsWith(u8, entry.path, "/zig")) {
-            // Check if parent directory name contains the version
+            // Extract version from parent directory name
             const parent_dir = std.fs.path.dirname(entry.path) orelse continue;
-            if (std.mem.indexOf(u8, parent_dir, latest_version) != null) {
-                return false; // Found matching version, no update needed
-            }
+            
+            // Try to parse version from directory name
+            if (Version.parse(allocator, parent_dir)) |version| {
+                return version;
+            } else |_| continue;
         }
     }
     
-    return true; // No matching version found, update needed
+    // No version found, return old version to trigger update
+    return Version{ .major = 0, .minor = 0, .patch = 0 };
 }
