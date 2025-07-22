@@ -1,11 +1,12 @@
 const std = @import("std");
 const Platform = @import("../utils/platform.zig").Platform;
+const output = @import("../utils/output.zig");
 
 /// List all locally installed Zig versions
 pub fn run(allocator: std.mem.Allocator, args: []const []const u8) !void {
     if (args.len > 0) {
-        std.debug.print("Error: 'zigup list' does not accept arguments\n", .{});
-        std.debug.print("Usage: zigup list\n", .{});
+        try output.printErr("Error: 'zigup list' does not accept arguments\n", .{});
+        try output.printOut("Usage: zigup list\n", .{});
         return;
     }
 
@@ -14,14 +15,14 @@ pub fn run(allocator: std.mem.Allocator, args: []const []const u8) !void {
 
     var dir = std.fs.cwd().openDir(bin_dir, .{ .iterate = true }) catch |err| switch (err) {
         error.FileNotFound => {
-            std.debug.print("No Zig versions installed.\n", .{});
+            try output.printOut("No Zig versions installed.\n", .{});
             return;
         },
         else => return err,
     };
     defer dir.close();
 
-    std.debug.print("Installed Zig versions:\n", .{});
+    try output.printOut("Installed Zig versions:\n", .{});
 
     const zig_exe = try Platform.getExecutableName(allocator, "zig");
     defer allocator.free(zig_exe);
@@ -33,7 +34,7 @@ pub fn run(allocator: std.mem.Allocator, args: []const []const u8) !void {
             defer allocator.free(zig_path);
 
             std.fs.cwd().access(zig_path, .{}) catch continue;
-            std.debug.print("  {s}\n", .{entry.name});
+            try output.printOut("  {s}\n", .{entry.name});
         }
     }
 }

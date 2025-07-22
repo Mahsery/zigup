@@ -10,14 +10,14 @@ pub fn main() !void {
     const allocator = gpa.allocator();
 
     std.debug.print("Testing installer API calls...\n", .{});
-    
+
     // Test what binary name we're looking for
     const binary_name = getBinaryName();
     std.debug.print("Looking for binary: '{s}'\n", .{binary_name});
-    
+
     // Test API call
     std.debug.print("Fetching from: {s}\n", .{GITHUB_RELEASES_URL});
-    
+
     var client = std.http.Client{ .allocator = allocator };
     defer client.deinit();
 
@@ -55,10 +55,10 @@ pub fn main() !void {
     defer allocator.free(body);
 
     std.debug.print("Response length: {} bytes\n", .{body.len});
-    
+
     // Try to parse JSON
     std.debug.print("Parsing JSON...\n", .{});
-    
+
     const Parser = zimdjson.dom.StreamParser(.default);
     var parser = Parser.init;
     defer parser.deinit(allocator);
@@ -74,7 +74,7 @@ pub fn main() !void {
         std.debug.print("Failed to get releases array: {}\n", .{err});
         return;
     };
-    
+
     var releases_iter = releases_array.iterator();
     const first_release = releases_iter.next() orelse {
         std.debug.print("No releases found in array\n", .{});
@@ -99,7 +99,7 @@ pub fn main() !void {
         const name = asset.at("name").asString() catch "unknown";
         std.debug.print("  Asset {}: '{s}'\n", .{ asset_count, name });
         asset_count += 1;
-        
+
         // Check if this matches what we're looking for
         if (std.mem.eql(u8, name, binary_name)) {
             std.debug.print("  ✓ MATCH FOUND!\n", .{});
@@ -108,14 +108,14 @@ pub fn main() !void {
             return;
         }
     }
-    
+
     std.debug.print("❌ No matching asset found for '{s}'\n", .{binary_name});
 }
 
 fn getBinaryName() []const u8 {
     return switch (builtin.os.tag) {
         .windows => "zigup-windows-x86_64.exe",
-        .linux => "zigup-linux-x86_64", 
+        .linux => "zigup-linux-x86_64",
         .macos => "zigup-macos-aarch64",
         else => "zigup-linux-x86_64",
     };

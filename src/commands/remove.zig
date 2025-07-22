@@ -2,10 +2,11 @@ const std = @import("std");
 const validation = @import("../utils/validation.zig");
 const Platform = @import("../utils/platform.zig").Platform;
 const builtin = @import("builtin");
+const output = @import("../utils/output.zig");
 
 pub fn run(allocator: std.mem.Allocator, args: []const []const u8) !void {
     if (args.len == 0) {
-        std.debug.print("Error: No version specified\n", .{});
+        try output.printErr("Error: No version specified\n", .{});
         return;
     }
 
@@ -21,7 +22,7 @@ pub fn run(allocator: std.mem.Allocator, args: []const []const u8) !void {
 
     std.fs.cwd().access(version_dir, .{}) catch |err| switch (err) {
         error.FileNotFound => {
-            std.debug.print("Error: Version '{s}' is not installed\n", .{version});
+            try output.printErr("Error: Version '{s}' is not installed\n", .{version});
             return;
         },
         else => return err,
@@ -50,8 +51,8 @@ pub fn run(allocator: std.mem.Allocator, args: []const []const u8) !void {
                 defer allocator.free(expected_path);
 
                 if (std.mem.indexOf(u8, content, expected_path) != null) {
-                    std.debug.print("Error: Cannot remove '{s}' - it is currently the default version\n", .{version});
-                    std.debug.print("Set a different version as default first with: zigup default <version>\n", .{});
+                    try output.printErr("Error: Cannot remove '{s}' - it is currently the default version\n", .{version});
+                    try output.printOut("Set a different version as default first with: zigup default <version>\n", .{});
                     return;
                 }
             } else |_| {}
@@ -67,15 +68,15 @@ pub fn run(allocator: std.mem.Allocator, args: []const []const u8) !void {
                 defer allocator.free(expected_target);
 
                 if (std.mem.eql(u8, current_target, expected_target)) {
-                    std.debug.print("Error: Cannot remove '{s}' - it is currently the default version\n", .{version});
-                    std.debug.print("Set a different version as default first with: zigup default <version>\n", .{});
+                    try output.printErr("Error: Cannot remove '{s}' - it is currently the default version\n", .{version});
+                    try output.printOut("Set a different version as default first with: zigup default <version>\n", .{});
                     return;
                 }
             } else |_| {}
         },
     }
 
-    std.debug.print("Removing Zig version '{s}' from {s}...\n", .{ version, version_dir });
+    try output.printOut("Removing Zig version '{s}' from {s}...\n", .{ version, version_dir });
 
     std.fs.cwd().deleteTree(version_dir) catch |err| switch (err) {
         error.AccessDenied => {
@@ -83,12 +84,12 @@ pub fn run(allocator: std.mem.Allocator, args: []const []const u8) !void {
                 .windows => "Please check directory permissions or run as Administrator",
                 else => "Please fix directory permissions or run: sudo chown -R $USER:$USER ~/bin",
             };
-            std.debug.print("Error: Permission denied removing directory: {s}\n", .{version_dir});
-            std.debug.print("{s}\n", .{instructions});
+            try output.printErr("Error: Permission denied removing directory: {s}\n", .{version_dir});
+            try output.printOut("{s}\n", .{instructions});
             return;
         },
         else => return err,
     };
 
-    std.debug.print("Successfully removed version '{s}'\n", .{version});
+    try output.printOut("Successfully removed version '{s}'\n", .{version});
 }

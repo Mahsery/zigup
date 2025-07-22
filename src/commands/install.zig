@@ -6,6 +6,7 @@ const minisign = @import("../utils/minisign.zig");
 const validation = @import("../utils/validation.zig");
 const Platform = @import("../utils/platform.zig").Platform;
 const update = @import("update.zig");
+const output = @import("../utils/output.zig");
 
 /// Safely cleanup temporary files with atomic operations to prevent race conditions
 fn safeCleanup(archive_path: []const u8, signature_path: []const u8) void {
@@ -26,22 +27,21 @@ fn safeCleanup(archive_path: []const u8, signature_path: []const u8) void {
 /// Download and install a specific Zig version
 pub fn run(allocator: std.mem.Allocator, args: []const []const u8) !void {
     if (args.len == 0) {
-        std.debug.print("Error: No version specified\n", .{});
+        try output.printErr("Error: No version specified\n", .{});
         return;
     }
 
     const version = args[0];
 
     // Check if version is available before proceeding
-    const is_available = if (update.isVersionAvailable(allocator, version)) |available| available else |err|
-        if (err == error.FileNotFound) false else return err;
+    const is_available = if (update.isVersionAvailable(allocator, version)) |available| available else |err| if (err == error.FileNotFound) false else return err;
 
     if (!is_available) {
-        std.debug.print("Error: Version '{s}' not found.\n\n", .{version});
+        try output.printErr("Error: Version '{s}' not found.\n\n", .{version});
 
         const available_versions = update.getAvailableVersions(allocator) catch |err| switch (err) {
             else => {
-                std.debug.print("Run 'zigup update' to fetch available versions, then try again.\n", .{});
+                try output.printErr("Run 'zigup update' to fetch available versions, then try again.\n", .{});
                 return;
             },
         };
@@ -51,25 +51,25 @@ pub fn run(allocator: std.mem.Allocator, args: []const []const u8) !void {
         }
 
         if (available_versions.len == 0) {
-            std.debug.print("Run 'zigup update' to fetch available versions, then try again.\n", .{});
+            try output.printErr("Run 'zigup update' to fetch available versions, then try again.\n", .{});
             return;
         }
 
-        std.debug.print("Available versions:\n", .{});
+        try output.printOut("Available versions:\n", .{});
         for (available_versions) |available_version| {
-            std.debug.print("  {s}\n", .{available_version});
+            try output.printOut("  {s}\n", .{available_version});
         }
         return;
     }
 
-    std.debug.print("Installing Zig version: {s}\n", .{version});
+    try output.printOut("Installing Zig version: {s}\n", .{version});
 
     const cache_file = try cache_utils.getIndexCacheFile(allocator);
     defer allocator.free(cache_file);
 
     const json_data = std.fs.cwd().readFileAlloc(allocator, cache_file, 1024 * 1024) catch |err| switch (err) {
         error.FileNotFound => {
-            std.debug.print("Error: Version cache not found. Run 'zigup update' first.\n", .{});
+            try output.printErr("Error: Version cache not found. Run 'zigup update' first.\n", .{});
             return;
         },
         else => return err,
@@ -83,7 +83,7 @@ pub fn run(allocator: std.mem.Allocator, args: []const []const u8) !void {
     const document = try parser.parseFromReader(allocator, json_slice.reader().any());
 
     const platform_str = Platform.getPlatformString();
-    std.debug.print("Detected platform: {s}\n", .{platform_str});
+    try output.printOut("Detected platform: {s}\n", .{platform_str});
 
     const version_key = if (std.mem.eql(u8, version, "master") or std.mem.eql(u8, version, "nightly"))
         "master"
@@ -95,12 +95,12 @@ pub fn run(allocator: std.mem.Allocator, args: []const []const u8) !void {
 
     const tarball_url = download_info.at("tarball").asString() catch |err| switch (err) {
         error.MissingField => {
-            std.debug.print("Error: Version '{s}' or platform '{s}' not found\n", .{ version, platform_str });
+            try output.printErr("Error: Version '{s}' or platform '{s}' not found\n", .{ version, platform_str });
             return;
         },
         else => return err,
     };
-    std.debug.print("Download URL: {s}\n", .{tarball_url});
+    try output.printOut("Download URL: {s}\n", .{tarball_url});
 
     const bin_dir = try Platform.getBinDir(allocator);
     defer allocator.free(bin_dir);
@@ -116,7 +116,7 @@ pub fn run(allocator: std.mem.Allocator, args: []const []const u8) !void {
                     break :blk std.fmt.allocPrint(allocator, "Please run: sudo chown {s}:{s} {s}", .{ user, user, bin_dir }) catch "Please fix directory permissions";
                 },
             };
-            std.debug.print("Error: Cannot create {s}. {s}\n", .{ bin_dir, instructions });
+            try output.printErr("Error: Cannot create {s}. {s}\n", .{ bin_dir, instructions });
             return;
         },
         else => return err,
@@ -134,9 +134,9 @@ pub fn run(allocator: std.mem.Allocator, args: []const []const u8) !void {
     const archive_path = try std.fs.path.join(allocator, &.{ cache_dir, archive_name });
     defer allocator.free(archive_path);
 
-    std.debug.print("Downloading to {s}...\n", .{archive_path});
+    try output.printOut("Downloading to {s}...\n", .{archive_path});
     fs_utils.downloadFile(allocator, tarball_url, archive_path) catch |err| {
-        std.debug.print("Error: Download failed: {}\n", .{err});
+        try output.printErr("Error: Download failed: {}\n", .{err});
         return;
     };
 
@@ -146,28 +146,28 @@ pub fn run(allocator: std.mem.Allocator, args: []const []const u8) !void {
     const signature_path = try std.fmt.allocPrint(allocator, "{s}.minisig", .{archive_path});
     defer allocator.free(signature_path);
 
-    std.debug.print("Downloading signature...\n", .{});
+    try output.printOut("Downloading signature...\n", .{});
     fs_utils.downloadFile(allocator, signature_url, signature_path) catch |err| {
-        std.debug.print("Error: Signature download failed: {}\n", .{err});
+        try output.printErr("Error: Signature download failed: {}\n", .{err});
         return;
     };
 
-    std.debug.print("Verifying signature...\n", .{});
+    try output.printOut("Verifying signature...\n", .{});
     verifyMinisignNative(allocator, archive_path, signature_path) catch |err| {
-        std.debug.print("Error: Signature verification failed: {}\n", .{err});
+        try output.printErr("Error: Signature verification failed: {}\n", .{err});
         safeCleanup(archive_path, signature_path);
         return;
     };
 
-    std.debug.print("Extracting to {s}...\n", .{version_dir});
+    try output.printOut("Extracting to {s}...\n", .{version_dir});
     fs_utils.extractArchive(allocator, archive_path, version_dir) catch |err| {
-        std.debug.print("Error: Extraction failed: {}\n", .{err});
+        try output.printErr("Error: Extraction failed: {}\n", .{err});
         return;
     };
 
     safeCleanup(archive_path, signature_path);
 
-    std.debug.print("Successfully installed Zig version: {s}\n", .{version});
+    try output.printOut("Successfully installed Zig version: {s}\n", .{version});
 }
 
 /// Verify minisign signature using native Zig implementation
@@ -177,14 +177,14 @@ fn verifyMinisignNative(allocator: std.mem.Allocator, file_path: []const u8, sig
 
     // Download the public key from Zig download page if not cached
     const pubkey = downloadZigPublicKey(allocator, pubkey_path) catch |err| {
-        std.debug.print("Error: Failed to fetch Zig public key: {}\n", .{err});
+        try output.printErr("Error: Failed to fetch Zig public key: {}\n", .{err});
         return err;
     };
     defer allocator.free(pubkey);
 
     // Use our native minisign verification
     minisign.verifyFile(allocator, file_path, signature_path, pubkey) catch |err| {
-        std.debug.print("Error: Native signature verification failed: {}\n", .{err});
+        try output.printErr("Error: Native signature verification failed: {}\n", .{err});
         return err;
     };
 }
@@ -208,7 +208,7 @@ fn downloadZigPublicKey(allocator: std.mem.Allocator, cache_path: []const u8) ![
         // Key exists but cache expired, need to verify against pinned key
     }
 
-    std.debug.print("Fetching Zig public key from download page...\n", .{});
+    try output.printOut("Fetching Zig public key from download page...\n", .{});
 
     var client = std.http.Client{ .allocator = allocator };
     defer client.deinit();
@@ -252,20 +252,20 @@ fn downloadZigPublicKey(allocator: std.mem.Allocator, cache_path: []const u8) ![
                     if (pinned_key) |pinned| {
                         defer allocator.free(pinned);
                         if (!std.mem.eql(u8, potential_key, pinned)) {
-                            std.debug.print("ERROR: Public key mismatch!\n", .{});
-                            std.debug.print("Pinned key:  {s}\n", .{pinned});
-                            std.debug.print("Fetched key: {s}\n", .{potential_key});
-                            std.debug.print("This could indicate a security compromise.\n", .{});
-                            std.debug.print("Use 'zigup key-reset' to accept the new key if legitimate.\n", .{});
+                            try output.printErr("ERROR: Public key mismatch!\n", .{});
+                            try output.printErr("Pinned key:  {s}\n", .{pinned});
+                            try output.printErr("Fetched key: {s}\n", .{potential_key});
+                            try output.printErr("This could indicate a security compromise.\n", .{});
+                            try output.printErr("Use 'zigup key-reset' to accept the new key if legitimate.\n", .{});
                             return error.PublicKeyMismatch;
                         }
-                        std.debug.print("Public key verified against pinned key.\n", .{});
+                        try output.printOut("Public key verified against pinned key.\n", .{});
                     } else {
                         // First time - warn user about key acceptance
-                        std.debug.print("WARNING: Accepting Zig team public key for first time\n", .{});
-                        std.debug.print("Key: {s}\n", .{potential_key});
-                        std.debug.print("This key will be pinned for future verification.\n", .{});
-                        std.debug.print("If this is not the expected key, abort now!\n\n", .{});
+                        try output.printErr("WARNING: Accepting Zig team public key for first time\n", .{});
+                        try output.printOut("Key: {s}\n", .{potential_key});
+                        try output.printOut("This key will be pinned for future verification.\n", .{});
+                        try output.printErr("If this is not the expected key, abort now!\n\n", .{});
                     }
 
                     // Cache/update the key

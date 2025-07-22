@@ -1,4 +1,5 @@
 const std = @import("std");
+const output = @import("output.zig");
 
 /// Minisign public key structure
 const MinisignPublicKey = struct {
@@ -94,31 +95,31 @@ fn parseSignature(allocator: std.mem.Allocator, sig_content: []const u8) !Minisi
 pub fn verifyFile(allocator: std.mem.Allocator, file_path: []const u8, signature_path: []const u8, public_key_b64: []const u8) !void {
     // Parse public key
     const pubkey = parsePublicKey(allocator, public_key_b64) catch |err| {
-        std.debug.print("Error: Failed to parse public key: {}\n", .{err});
+        try output.printOut("Error: Failed to parse public key: {}\n", .{err});
         return err;
     };
 
     // Read and parse signature file
     const sig_content = std.fs.cwd().readFileAlloc(allocator, signature_path, 1024) catch |err| {
-        std.debug.print("Error: Failed to read signature file: {}\n", .{err});
+        try output.printOut("Error: Failed to read signature file: {}\n", .{err});
         return err;
     };
     defer allocator.free(sig_content);
 
     const signature = parseSignature(allocator, sig_content) catch |err| {
-        std.debug.print("Error: Failed to parse signature: {}\n", .{err});
+        try output.printOut("Error: Failed to parse signature: {}\n", .{err});
         return err;
     };
 
     // Verify key IDs match
     if (!std.mem.eql(u8, &pubkey.key_id, &signature.key_id)) {
-        std.debug.print("Error: Key ID mismatch\n", .{});
+        try output.printOut("Error: Key ID mismatch\n", .{});
         return error.KeyIdMismatch;
     }
 
     // Read file to verify
     const file_data = std.fs.cwd().readFileAlloc(allocator, file_path, 1024 * 1024 * 100) catch |err| { // 100MB max
-        std.debug.print("Error: Failed to read file to verify: {}\n", .{err});
+        try output.printOut("Error: Failed to read file to verify: {}\n", .{err});
         return err;
     };
     defer allocator.free(file_data);
@@ -139,9 +140,9 @@ pub fn verifyFile(allocator: std.mem.Allocator, file_path: []const u8, signature
     const sig = std.crypto.sign.Ed25519.Signature.fromBytes(signature.signature);
 
     sig.verify(message, public_key) catch {
-        std.debug.print("Error: Signature verification failed\n", .{});
+        try output.printOut("Error: Signature verification failed\n", .{});
         return error.SignatureVerificationFailed;
     };
 
-    std.debug.print("Signature verification successful!\n", .{});
+    try output.printOut("Signature verification successful!\n", .{});
 }

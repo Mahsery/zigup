@@ -5,6 +5,7 @@ const VersionIndex = @import("../models/version.zig").VersionIndex;
 const ZigVersion = @import("../models/version.zig").ZigVersion;
 const HttpClient = @import("../utils/http_client.zig").HttpClient;
 const ZigupError = @import("../utils/errors.zig").ZigupError;
+const output = @import("../utils/output.zig");
 
 /// Check if a version exists in the cached version information
 pub fn isVersionAvailable(allocator: std.mem.Allocator, version: []const u8) !bool {
@@ -55,7 +56,7 @@ pub fn getAvailableVersions(allocator: std.mem.Allocator) ![][]const u8 {
 
     // Sort release versions semantically (newest first)
     std.mem.sort([]const u8, release_versions.items, {}, compareVersions);
-    
+
     // Add sorted versions to final list
     for (release_versions.items) |version| {
         try versions.append(version);
@@ -67,11 +68,11 @@ pub fn getAvailableVersions(allocator: std.mem.Allocator) ![][]const u8 {
 /// Compare versions for semantic sorting (newest first)
 fn compareVersions(context: void, a: []const u8, b: []const u8) bool {
     _ = context;
-    
+
     // Simple version comparison - parse major.minor.patch and compare
     const a_parts = parseSimpleVersion(a);
     const b_parts = parseSimpleVersion(b);
-    
+
     // Compare major version first
     if (a_parts.major != b_parts.major) return a_parts.major > b_parts.major;
     // Then minor version
@@ -82,41 +83,41 @@ fn compareVersions(context: void, a: []const u8, b: []const u8) bool {
 
 const SimpleVersion = struct {
     major: u32,
-    minor: u32, 
+    minor: u32,
     patch: u32,
 };
 
 fn parseSimpleVersion(version_str: []const u8) SimpleVersion {
     var parts = std.mem.splitScalar(u8, version_str, '.');
-    
+
     const major_str = parts.next() orelse return SimpleVersion{ .major = 0, .minor = 0, .patch = 0 };
     const minor_str = parts.next() orelse return SimpleVersion{ .major = 0, .minor = 0, .patch = 0 };
     const patch_str = parts.next() orelse return SimpleVersion{ .major = 0, .minor = 0, .patch = 0 };
-    
+
     const major = std.fmt.parseInt(u32, major_str, 10) catch 0;
     const minor = std.fmt.parseInt(u32, minor_str, 10) catch 0;
     const patch = std.fmt.parseInt(u32, patch_str, 10) catch 0;
-    
+
     return SimpleVersion{ .major = major, .minor = minor, .patch = patch };
 }
 
 /// Fetch and cache the latest Zig version index from ziglang.org
 pub fn run(allocator: std.mem.Allocator, args: []const []const u8) !void {
     if (args.len > 0) {
-        std.debug.print("Error: 'zigup update' does not accept arguments\n", .{});
-        std.debug.print("Usage: zigup update\n", .{});
+        try output.printErr("Error: 'zigup update' does not accept arguments\n", .{});
+        try output.printOut("Usage: zigup update\n", .{});
         return;
     }
 
-    std.debug.print("Fetching Zig version information...\n", .{});
+    try output.printOut("Fetching Zig version information...\n", .{});
 
     const url = "https://ziglang.org/download/index.json";
-    
+
     var http_client = HttpClient.init(allocator);
     defer http_client.deinit();
 
     const body = http_client.fetchJson(url) catch |err| {
-        std.debug.print("Error: Failed to fetch version information: {}\n", .{err});
+        try output.printErr("Error: Failed to fetch version information: {}\n", .{err});
         return ZigupError.HttpRequestFailed;
     };
     defer allocator.free(body);
@@ -130,7 +131,7 @@ pub fn run(allocator: std.mem.Allocator, args: []const []const u8) !void {
     try std.fs.cwd().makePath(cache_dir);
     try std.fs.cwd().writeFile(.{ .sub_path = cache_file, .data = body });
 
-    std.debug.print("Version information cached successfully.\n", .{});
+    try output.printOut("Version information cached successfully.\n", .{});
 }
 
 /// Get parsed version index as HashMap
@@ -145,9 +146,9 @@ fn getVersionIndex(allocator: std.mem.Allocator) !VersionIndex {
     defer parser.deinit(allocator);
     var json_slice = std.io.fixedBufferStream(json_data);
     const document = try parser.parseFromReader(allocator, json_slice.reader().any());
-    
+
     var version_map = VersionIndex.init(allocator);
-    
+
     // Simply store all key-value pairs as raw JSON strings for now
     // This avoids complex lifetime issues with zimdjson Values
     const obj = try document.asObject();
@@ -157,7 +158,7 @@ fn getVersionIndex(allocator: std.mem.Allocator) !VersionIndex {
         const raw_json = "{}"; // Placeholder - we'll enhance this later if needed
         try version_map.put(version_name, .{ .raw_json = raw_json });
     }
-    
+
     return version_map;
 }
 
@@ -170,7 +171,7 @@ pub fn showCachedVersions(allocator: std.mem.Allocator) !void {
 pub fn showCachedVersionsWithLimit(allocator: std.mem.Allocator, limit: ?usize) !void {
     const versions = getAvailableVersions(allocator) catch |err| switch (err) {
         error.FileNotFound => {
-            std.debug.print("No cached version information. Run 'zigup update' first.\n", .{});
+            try output.printOut("No cached version information. Run 'zigup update' first.\n", .{});
             return;
         },
         else => return err,
@@ -180,17 +181,17 @@ pub fn showCachedVersionsWithLimit(allocator: std.mem.Allocator, limit: ?usize) 
         allocator.free(versions);
     }
 
-    std.debug.print("Available Zig versions:\n", .{});
+    try output.printOut("Available Zig versions:\n", .{});
 
     const show_count = if (limit) |l| @min(l, versions.len) else versions.len;
-    
+
     for (versions[0..show_count]) |version| {
-        std.debug.print("  {s}\n", .{version});
+        try output.printOut("  {s}\n", .{version});
     }
-    
+
     if (limit != null and versions.len > show_count) {
         const remaining = versions.len - show_count;
-        std.debug.print("  ... and {d} more\n", .{remaining});
-        std.debug.print("\nUse 'zigup update list --all' to see all available versions.\n", .{});
+        try output.printOut("  ... and {d} more\n", .{remaining});
+        try output.printOut("\nUse 'zigup update list --all' to see all available versions.\n", .{});
     }
 }

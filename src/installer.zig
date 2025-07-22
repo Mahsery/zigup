@@ -1,6 +1,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const zimdjson = @import("zimdjson");
+const output = @import("utils/output.zig");
 
 const GITHUB_RELEASES_URL = "https://api.github.com/repos/Mahsery/zigup/releases";
 
@@ -9,20 +10,20 @@ pub fn main() !void {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    std.debug.print("ZigUp Installer\n", .{});
-    std.debug.print("===============\n\n", .{});
+    try output.printOut("ZigUp Installer\n", .{});
+    try output.printOut("===============\n\n", .{});
 
     // Get platform-specific binary name
     const binary_name = getBinaryName();
     const install_dir = try getInstallDir(allocator);
     defer allocator.free(install_dir);
 
-    std.debug.print("Installing ZigUp to: {s}\n", .{install_dir});
+    try output.printOut("Installing ZigUp to: {s}\n", .{install_dir});
 
     // Create install directory
     std.fs.cwd().makePath(install_dir) catch |err| switch (err) {
         error.AccessDenied => {
-            std.debug.print("Error: Permission denied creating directory: {s}\n", .{install_dir});
+            try output.printErr("Error: Permission denied creating directory: {s}\n", .{install_dir});
             return;
         },
         else => return err,
@@ -32,7 +33,7 @@ pub fn main() !void {
     const download_url = try getLatestReleaseUrl(allocator, binary_name);
     defer allocator.free(download_url);
 
-    std.debug.print("Downloading from: {s}\n", .{download_url});
+    try output.printOut("Downloading from: {s}\n", .{download_url});
 
     // Download zigup binary
     const binary_path = try std.fs.path.join(allocator, &.{ install_dir, getBinaryFileName() });
@@ -47,19 +48,19 @@ pub fn main() !void {
         file.chmod(0o755) catch {};
     }
 
-    std.debug.print("Successfully downloaded zigup!\n\n", .{});
+    try output.printOut("Successfully downloaded zigup!\n\n", .{});
 
     // Setup PATH
     try setupPath(allocator, install_dir);
 
-    std.debug.print("Installation complete!\n", .{});
-    std.debug.print("Run 'zigup update' to get started.\n", .{});
+    try output.printOut("Installation complete!\n", .{});
+    try output.printOut("Run 'zigup update' to get started.\n", .{});
 }
 
 fn getBinaryName() []const u8 {
     return switch (builtin.os.tag) {
         .windows => "zigup-windows-x86_64.exe",
-        .linux => "zigup-linux-x86_64", 
+        .linux => "zigup-linux-x86_64",
         .macos => "zigup-macos-aarch64",
         else => "zigup-linux-x86_64",
     };
@@ -172,12 +173,12 @@ fn setupWindowsPath(install_dir: []const u8) !void {
     defer std.heap.page_allocator.free(current_path);
 
     if (std.mem.indexOf(u8, current_path, install_dir) != null) {
-        std.debug.print("Directory already in PATH: {s}\n", .{install_dir});
+        try output.printOut("Directory already in PATH: {s}\n", .{install_dir});
         return;
     }
 
-    std.debug.print("Adding to PATH: {s}\n", .{install_dir});
-    std.debug.print("Note: You may need to restart your terminal for PATH changes to take effect.\n", .{});
+    try output.printOut("Adding to PATH: {s}\n", .{install_dir});
+    try output.printOut("Note: You may need to restart your terminal for PATH changes to take effect.\n", .{});
 
     // Try to modify user PATH (requires no admin privileges)
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
@@ -190,16 +191,16 @@ fn setupWindowsPath(install_dir: []const u8) !void {
     process.stdout_behavior = .Ignore;
     process.stderr_behavior = .Ignore;
     const result = process.spawnAndWait() catch {
-        std.debug.print("Warning: Could not automatically update PATH.\n", .{});
-        std.debug.print("Please manually add {s} to your PATH.\n", .{install_dir});
+        try output.printErr("Warning: Could not automatically update PATH.\n", .{});
+        try output.printErr("Please manually add {s} to your PATH.\n", .{install_dir});
         return;
     };
 
     if (result == .Exited and result.Exited == 0) {
-        std.debug.print("PATH updated successfully!\n", .{});
+        try output.printOut("PATH updated successfully!\n", .{});
     } else {
-        std.debug.print("Warning: PATH update may have failed.\n", .{});
-        std.debug.print("Please manually add {s} to your PATH if needed.\n", .{install_dir});
+        try output.printErr("Warning: PATH update may have failed.\n", .{});
+        try output.printErr("Please manually add {s} to your PATH if needed.\n", .{install_dir});
     }
 }
 
@@ -209,30 +210,30 @@ fn setupUnixPath(allocator: std.mem.Allocator, install_dir: []const u8) !void {
     defer allocator.free(current_path);
 
     if (std.mem.indexOf(u8, current_path, install_dir) != null) {
-        std.debug.print("Directory already in PATH: {s}\n", .{install_dir});
+        try output.printOut("Directory already in PATH: {s}\n", .{install_dir});
         return;
     }
 
     // Detect shell and provide instructions
     const shell = std.process.getEnvVarOwned(allocator, "SHELL") catch {
-        std.debug.print("Could not detect shell. Please manually add to PATH:\n", .{});
-        std.debug.print("  export PATH=\"{s}:$PATH\"\n", .{install_dir});
+        try output.printOut("Could not detect shell. Please manually add to PATH:\n", .{});
+        try output.printOut("  export PATH=\"{s}:$PATH\"\n", .{install_dir});
         return;
     };
     defer allocator.free(shell);
 
     const shell_name = std.fs.path.basename(shell);
 
-    std.debug.print("To complete installation, add {s} to your PATH:\n\n", .{install_dir});
+    try output.printOut("To complete installation, add {s} to your PATH:\n\n", .{install_dir});
 
     if (std.mem.eql(u8, shell_name, "fish")) {
-        std.debug.print("Add to ~/.config/fish/config.fish:\n", .{});
-        std.debug.print("  set -gx PATH {s} $PATH\n", .{install_dir});
+        try output.printOut("Add to ~/.config/fish/config.fish:\n", .{});
+        try output.printOut("  set -gx PATH {s} $PATH\n", .{install_dir});
     } else {
         const config_file = if (std.mem.eql(u8, shell_name, "zsh")) "~/.zshrc" else "~/.bashrc";
-        std.debug.print("Add to {s}:\n", .{config_file});
-        std.debug.print("  export PATH=\"{s}:$PATH\"\n", .{install_dir});
+        try output.printOut("Add to {s}:\n", .{config_file});
+        try output.printOut("  export PATH=\"{s}:$PATH\"\n", .{install_dir});
     }
 
-    std.debug.print("\nThen restart your terminal or run: source <config-file>\n", .{});
+    try output.printOut("\nThen restart your terminal or run: source <config-file>\n", .{});
 }

@@ -1,5 +1,6 @@
 const std = @import("std");
 const builtin = @import("builtin");
+const output = @import("output.zig");
 
 /// Create a symbolic link, replacing any existing link at the target path
 pub fn createSymlink(target: []const u8, link_path: []const u8) !void {
@@ -23,8 +24,8 @@ pub fn extractTarXz(allocator: std.mem.Allocator, archive_path: []const u8, dest
     // Create destination directory
     std.fs.cwd().makePath(destination) catch |err| switch (err) {
         error.AccessDenied => {
-            std.debug.print("Error: Permission denied creating directory: {s}\n", .{destination});
-            std.debug.print("Please fix directory permissions or run: sudo chown -R $USER:$USER ~/bin\n", .{});
+            try output.printErr("Error: Permission denied creating directory: {s}\n", .{destination});
+            try output.printOut("Please fix directory permissions or run: sudo chown -R $USER:$USER ~/bin\n", .{});
             return error.AccessDenied;
         },
         else => return err,
@@ -32,7 +33,7 @@ pub fn extractTarXz(allocator: std.mem.Allocator, archive_path: []const u8, dest
 
     // Read compressed archive
     const compressed_data = std.fs.cwd().readFileAlloc(allocator, archive_path, 1024 * 1024 * 100) catch |err| {
-        std.debug.print("Error: Failed to read archive file: {}\n", .{err});
+        try output.printErr("Error: Failed to read archive file: {}\n", .{err});
         return err;
     };
     defer allocator.free(compressed_data);
@@ -40,14 +41,14 @@ pub fn extractTarXz(allocator: std.mem.Allocator, archive_path: []const u8, dest
     // Decompress XZ stream
     var decompressed_stream = std.io.fixedBufferStream(compressed_data);
     var decompressor = std.compress.xz.decompress(allocator, decompressed_stream.reader()) catch |err| {
-        std.debug.print("Error: Failed to decompress XZ archive: {}\n", .{err});
+        try output.printErr("Error: Failed to decompress XZ archive: {}\n", .{err});
         return err;
     };
     defer decompressor.deinit();
 
     // Open destination directory
     var dest_dir = std.fs.cwd().openDir(destination, .{}) catch |err| {
-        std.debug.print("Error: Failed to open destination directory: {}\n", .{err});
+        try output.printErr("Error: Failed to open destination directory: {}\n", .{err});
         return err;
     };
     defer dest_dir.close();
@@ -65,8 +66,8 @@ pub fn extractZip(allocator: std.mem.Allocator, archive_path: []const u8, destin
                 .windows => "Please check directory permissions or run as Administrator",
                 else => "Please fix directory permissions or run: sudo chown -R $USER:$USER ~/bin",
             };
-            std.debug.print("Error: Permission denied creating directory: {s}\n", .{destination});
-            std.debug.print("{s}\n", .{instructions});
+            try output.printErr("Error: Permission denied creating directory: {s}\n", .{destination});
+            try output.printOut("{s}\n", .{instructions});
             return error.AccessDenied;
         },
         else => return err,
@@ -74,14 +75,14 @@ pub fn extractZip(allocator: std.mem.Allocator, archive_path: []const u8, destin
 
     // Open ZIP file
     const file = std.fs.cwd().openFile(archive_path, .{}) catch |err| {
-        std.debug.print("Error: Failed to open ZIP archive: {}\n", .{err});
+        try output.printErr("Error: Failed to open ZIP archive: {}\n", .{err});
         return err;
     };
     defer file.close();
 
     // Open destination directory
     var dest_dir = std.fs.cwd().openDir(destination, .{}) catch |err| {
-        std.debug.print("Error: Failed to open destination directory: {}\n", .{err});
+        try output.printErr("Error: Failed to open destination directory: {}\n", .{err});
         return err;
     };
     defer dest_dir.close();
@@ -95,14 +96,14 @@ fn extractZipWithValidation(allocator: std.mem.Allocator, dest_dir: std.fs.Dir, 
     var seekable_stream = file.seekableStream();
     const ZipIterator = std.zip.Iterator(@TypeOf(seekable_stream));
     var zip = ZipIterator.init(seekable_stream) catch |err| {
-        std.debug.print("Error: Failed to initialize ZIP reader: {}\n", .{err});
+        try output.printErr("Error: Failed to initialize ZIP reader: {}\n", .{err});
         return err;
     };
 
     var filename_buf: [std.fs.max_path_bytes]u8 = undefined;
     while (try zip.next()) |entry| {
         if (entry.filename_len > filename_buf.len) {
-            std.debug.print("Warning: Filename too long, skipping: {d} bytes\n", .{entry.filename_len});
+            try output.printErr("Warning: Filename too long, skipping: {d} bytes\n", .{entry.filename_len});
             continue;
         }
 
@@ -111,7 +112,7 @@ fn extractZipWithValidation(allocator: std.mem.Allocator, dest_dir: std.fs.Dir, 
         const filename = filename_buf[0..entry.filename_len];
         const len = try seekable_stream.context.reader().readAll(filename);
         if (len != filename.len) {
-            std.debug.print("Warning: Failed to read complete filename, skipping\n", .{});
+            try output.printErr("Warning: Failed to read complete filename, skipping\n", .{});
             continue;
         }
 
@@ -121,7 +122,7 @@ fn extractZipWithValidation(allocator: std.mem.Allocator, dest_dir: std.fs.Dir, 
 
         // Skip if path is unsafe
         if (safe_path.len == 0) {
-            std.debug.print("Warning: Skipping unsafe path in archive: {s}\n", .{filename});
+            try output.printErr("Warning: Skipping unsafe path in archive: {s}\n", .{filename});
             continue;
         }
 
@@ -140,7 +141,7 @@ fn extractZipWithValidation(allocator: std.mem.Allocator, dest_dir: std.fs.Dir, 
             dest_dir.deleteFile(safe_path) catch {};
             const crc32 = try entry.extract(seekable_stream, .{}, &filename_buf, dest_dir);
             if (crc32 != entry.crc32) {
-                std.debug.print("Warning: CRC32 mismatch for file: {s}\n", .{filename});
+                try output.printErr("Warning: CRC32 mismatch for file: {s}\n", .{filename});
             }
 
             // Set executable bit if needed (Unix only)
@@ -174,7 +175,7 @@ fn extractTarWithValidation(allocator: std.mem.Allocator, dest_dir: std.fs.Dir, 
 
         // Skip if path is unsafe
         if (safe_path.len == 0) {
-            std.debug.print("Warning: Skipping unsafe path in archive: {s}\n", .{entry.name});
+            try output.printErr("Warning: Skipping unsafe path in archive: {s}\n", .{entry.name});
             continue;
         }
 
@@ -210,7 +211,7 @@ fn extractTarWithValidation(allocator: std.mem.Allocator, dest_dir: std.fs.Dir, 
             },
             else => {
                 // Skip symlinks, devices, etc. for security
-                std.debug.print("Warning: Skipping unsupported entry type in archive: {s}\n", .{entry.name});
+                try output.printErr("Warning: Skipping unsupported entry type in archive: {s}\n", .{entry.name});
             },
         }
     }

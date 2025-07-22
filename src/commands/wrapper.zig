@@ -1,6 +1,7 @@
 const std = @import("std");
 const use = @import("use.zig");
 const Platform = @import("../utils/platform.zig").Platform;
+const output = @import("../utils/output.zig");
 
 /// Create a zig wrapper that respects local .zig-version files
 pub fn createWrapper(allocator: std.mem.Allocator) !void {
@@ -17,14 +18,14 @@ pub fn createWrapper(allocator: std.mem.Allocator) !void {
         else => try createUnixWrapper(allocator, wrapper_path),
     }
 
-    std.debug.print("Created zig wrapper at: {s}\n", .{wrapper_path});
+    try output.printOut("Created zig wrapper at: {s}\n", .{wrapper_path});
 }
 
 fn createWindowsWrapper(allocator: std.mem.Allocator, wrapper_path: []const u8) !void {
     const bat_path = try std.fmt.allocPrint(allocator, "{s}.bat", .{wrapper_path});
     defer allocator.free(bat_path);
 
-    const wrapper_content = 
+    const wrapper_content =
         \\@echo off
         \\setlocal enabledelayedexpansion
         \\
@@ -71,7 +72,7 @@ fn createUnixWrapper(_: std.mem.Allocator, wrapper_path: []const u8) !void {
         else => return err,
     };
 
-    const wrapper_content = 
+    const wrapper_content =
         \\#!/bin/bash
         \\
         \\# Check for .zig-version file in current directory and parent directories
@@ -109,7 +110,7 @@ fn createUnixWrapper(_: std.mem.Allocator, wrapper_path: []const u8) !void {
     ;
 
     try std.fs.cwd().writeFile(.{ .sub_path = wrapper_path, .data = wrapper_content });
-    
+
     // Make the wrapper executable
     const file = try std.fs.cwd().openFile(wrapper_path, .{});
     defer file.close();

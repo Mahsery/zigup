@@ -1,5 +1,6 @@
 const std = @import("std");
 const builtin = @import("builtin");
+const output = @import("output.zig");
 
 /// Platform-specific configuration and utilities
 pub const Platform = struct {
@@ -139,11 +140,11 @@ pub const Platform = struct {
                 .x86_64 => "x86_64-windows",
                 .aarch64 => "aarch64-windows",
                 .x86 => {
-                    std.debug.print("Warning: 32-bit Windows not officially supported, using x86_64-windows\n", .{});
+                    try output.printErr("Warning: 32-bit Windows not officially supported, using x86_64-windows\n", .{});
                     return "x86_64-windows";
                 },
                 else => {
-                    std.debug.print("Warning: Unsupported Windows architecture '{}', using x86_64-windows\n", .{builtin.cpu.arch});
+                    try output.printErr("Warning: Unsupported Windows architecture '{}', using x86_64-windows\n", .{builtin.cpu.arch});
                     return "x86_64-windows";
                 },
             },
@@ -151,15 +152,15 @@ pub const Platform = struct {
                 .x86_64 => "x86_64-linux",
                 .aarch64 => "aarch64-linux",
                 .riscv64 => {
-                    std.debug.print("Warning: RISC-V support limited, using x86_64-linux\n", .{});
+                    try output.printErr("Warning: RISC-V support limited, using x86_64-linux\n", .{});
                     return "x86_64-linux";
                 },
                 .x86 => {
-                    std.debug.print("Warning: 32-bit Linux not officially supported, using x86_64-linux\n", .{});
+                    try output.printErr("Warning: 32-bit Linux not officially supported, using x86_64-linux\n", .{});
                     return "x86_64-linux";
                 },
                 else => {
-                    std.debug.print("Warning: Unsupported Linux architecture '{}', using x86_64-linux\n", .{builtin.cpu.arch});
+                    try output.printErr("Warning: Unsupported Linux architecture '{}', using x86_64-linux\n", .{builtin.cpu.arch});
                     return "x86_64-linux";
                 },
             },
@@ -167,20 +168,20 @@ pub const Platform = struct {
                 .x86_64 => "x86_64-macos",
                 .aarch64 => "aarch64-macos",
                 else => {
-                    std.debug.print("Warning: Unsupported macOS architecture '{}', using x86_64-macos\n", .{builtin.cpu.arch});
+                    try output.printErr("Warning: Unsupported macOS architecture '{}', using x86_64-macos\n", .{builtin.cpu.arch});
                     return "x86_64-macos";
                 },
             },
             .freebsd => {
-                std.debug.print("Warning: FreeBSD not officially supported, using x86_64-linux\n", .{});
+                try output.printErr("Warning: FreeBSD not officially supported, using x86_64-linux\n", .{});
                 return "x86_64-linux";
             },
             .openbsd => {
-                std.debug.print("Warning: OpenBSD not officially supported, using x86_64-linux\n", .{});
+                try output.printErr("Warning: OpenBSD not officially supported, using x86_64-linux\n", .{});
                 return "x86_64-linux";
             },
             else => {
-                std.debug.print("Warning: Unsupported OS '{}', using x86_64-linux\n", .{builtin.os.tag});
+                try output.printErr("Warning: Unsupported OS '{}', using x86_64-linux\n", .{builtin.os.tag});
                 return "x86_64-linux";
             },
         };

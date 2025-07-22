@@ -23,7 +23,7 @@ pub const ZigVersion = struct {
     stdDocs: ?[]const u8 = null,
     notes: ?[]const u8 = null,
     src: ?Download = null,
-    
+
     // Platform downloads - using inline to flatten the structure
     @"x86_64-linux": ?Download = null,
     @"x86_64-macos": ?Download = null,
