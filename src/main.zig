@@ -197,9 +197,9 @@ fn selfUpdate(allocator: std.mem.Allocator) !void {
     std.debug.print("New version available: {s} (current: {s})\n", .{tag_name, current_trimmed});
     std.debug.print("Downloading update...\n", .{});
     
-    // Determine platform-specific binary name
+    // Determine platform-specific binary name and build download URL from release tag
     const platform_binary = getPlatformBinary();
-    const download_url = try std.fmt.allocPrint(allocator, "https://github.com/Mahsery/zigup/releases/latest/download/{s}", .{platform_binary});
+    const download_url = try std.fmt.allocPrint(allocator, "https://github.com/Mahsery/zigup/releases/download/v{s}/{s}", .{tag_name, platform_binary});
     defer allocator.free(download_url);
     
     // Download the new binary to a temp location

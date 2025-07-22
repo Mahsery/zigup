@@ -28,7 +28,7 @@ pub fn main() !void {
         else => return err,
     };
 
-    // Download latest release info
+    // Get latest release download URL
     const download_url = try getLatestReleaseUrl(allocator, binary_name);
     defer allocator.free(download_url);
 
