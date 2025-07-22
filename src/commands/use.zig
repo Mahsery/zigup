@@ -14,10 +14,8 @@ pub fn run(allocator: std.mem.Allocator, args: []const []const u8) !void {
     try validation.validateVersionString(version);
 
     // Check if version is available before proceeding
-    const is_available = update.isVersionAvailable(allocator, version) catch |err| switch (err) {
-        error.FileNotFound => false, // No cache file means run update first
-        else => return err,
-    };
+    const is_available = if (update.isVersionAvailable(allocator, version)) |available| available else |err|
+        if (err == error.FileNotFound) false else return err;
 
     if (!is_available) {
         std.debug.print("Error: Version '{s}' not found.\n", .{version});
@@ -49,9 +47,7 @@ pub fn getLocalVersion(allocator: std.mem.Allocator) !?[]u8 {
     };
     defer file.close();
 
-    const contents = file.readToEndAlloc(allocator, 1024) catch |err| {
-        return err;
-    };
+    const contents = try file.readToEndAlloc(allocator, 1024);
 
     // Trim whitespace from the version string
     const trimmed = std.mem.trim(u8, contents, " \n\r\t");
@@ -134,15 +130,10 @@ pub fn findLocalVersion(allocator: std.mem.Allocator) !?[]u8 {
 }
 
 fn getLocalVersionInDir(allocator: std.mem.Allocator, dir: std.fs.Dir) ![]u8 {
-    const file = dir.openFile(".zig-version", .{}) catch |err| switch (err) {
-        error.FileNotFound => return error.FileNotFound,
-        else => return err,
-    };
+    const file = try dir.openFile(".zig-version", .{});
     defer file.close();
 
-    const contents = file.readToEndAlloc(allocator, 1024) catch |err| {
-        return err;
-    };
+    const contents = try file.readToEndAlloc(allocator, 1024);
 
     // Trim whitespace from the version string
     const trimmed = std.mem.trim(u8, contents, " \n\r\t");

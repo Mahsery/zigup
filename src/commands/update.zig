@@ -8,10 +8,8 @@ const ZigupError = @import("../utils/errors.zig").ZigupError;
 
 /// Check if a version exists in the cached version information
 pub fn isVersionAvailable(allocator: std.mem.Allocator, version: []const u8) !bool {
-    var version_index = getVersionIndex(allocator) catch |err| switch (err) {
-        error.FileNotFound => return false,
-        else => return err,
-    };
+    var version_index = getVersionIndex(allocator) catch |err|
+        if (err == error.FileNotFound) return false else return err;
     defer {
         var iter = version_index.iterator();
         while (iter.next()) |entry| {
@@ -30,10 +28,8 @@ pub fn isVersionAvailable(allocator: std.mem.Allocator, version: []const u8) !bo
 
 /// Get list of available versions from cache with semantic sorting
 pub fn getAvailableVersions(allocator: std.mem.Allocator) ![][]const u8 {
-    var version_index = getVersionIndex(allocator) catch |err| switch (err) {
-        error.FileNotFound => return &[_][]const u8{}, // Return empty list if no cache
-        else => return err,
-    };
+    var version_index = getVersionIndex(allocator) catch |err|
+        if (err == error.FileNotFound) return &[_][]const u8{} else return err;
     defer {
         var iter = version_index.iterator();
         while (iter.next()) |entry| {
@@ -142,10 +138,7 @@ fn getVersionIndex(allocator: std.mem.Allocator) !VersionIndex {
     const cache_file = try cache_utils.getIndexCacheFile(allocator);
     defer allocator.free(cache_file);
 
-    const json_data = std.fs.cwd().readFileAlloc(allocator, cache_file, 1024 * 1024) catch |err| switch (err) {
-        error.FileNotFound => return error.FileNotFound,
-        else => return err,
-    };
+    const json_data = try std.fs.cwd().readFileAlloc(allocator, cache_file, 1024 * 1024);
     defer allocator.free(json_data);
 
     var parser = zimdjson.dom.StreamParser(.default).init;

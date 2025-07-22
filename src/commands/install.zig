@@ -33,10 +33,8 @@ pub fn run(allocator: std.mem.Allocator, args: []const []const u8) !void {
     const version = args[0];
 
     // Check if version is available before proceeding
-    const is_available = update.isVersionAvailable(allocator, version) catch |err| switch (err) {
-        error.FileNotFound => false, // No cache file means run update first
-        else => return err,
-    };
+    const is_available = if (update.isVersionAvailable(allocator, version)) |available| available else |err|
+        if (err == error.FileNotFound) false else return err;
 
     if (!is_available) {
         std.debug.print("Error: Version '{s}' not found.\n\n", .{version});
