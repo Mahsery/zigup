@@ -211,10 +211,12 @@ fn selfUpdate(allocator: std.mem.Allocator) !void {
         return ZigupError.DownloadFailed;
     };
     
-    // Make it executable
-    const temp_file = try std.fs.cwd().openFile(temp_path, .{});
-    defer temp_file.close();
-    try temp_file.chmod(0o755);
+    // Make it executable (Unix-like systems only)
+    if (std.fs.has_executable_bit) {
+        const temp_file = try std.fs.cwd().openFile(temp_path, .{});
+        defer temp_file.close();
+        try temp_file.chmod(0o755);
+    }
     
     // Get current executable path
     var exe_path_buf: [std.fs.max_path_bytes]u8 = undefined;
