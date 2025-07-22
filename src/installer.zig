@@ -58,10 +58,10 @@ pub fn main() !void {
 
 fn getBinaryName() []const u8 {
     return switch (builtin.os.tag) {
-        .windows => "zigup.exe",
-        .linux => "zigup-linux",
-        .macos => "zigup-macos",
-        else => "zigup",
+        .windows => "zigup-windows-x86_64.exe",
+        .linux => "zigup-linux-x86_64", 
+        .macos => "zigup-macos-aarch64",
+        else => "zigup-linux-x86_64",
     };
 }
 
