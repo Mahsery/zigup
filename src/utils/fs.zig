@@ -46,10 +46,11 @@ pub fn extractTarXz(allocator: std.mem.Allocator, archive_path: []const u8, dest
     defer decompressor.deinit();
 
     // Open destination directory
-    const dest_dir = std.fs.cwd().openDir(destination, .{}) catch |err| {
+    var dest_dir = std.fs.cwd().openDir(destination, .{}) catch |err| {
         std.debug.print("Error: Failed to open destination directory: {}\n", .{err});
         return err;
     };
+    defer dest_dir.close();
 
     // Extract TAR with path traversal protection
     try extractTarWithValidation(allocator, dest_dir, decompressor.reader());
@@ -79,10 +80,11 @@ pub fn extractZip(allocator: std.mem.Allocator, archive_path: []const u8, destin
     defer file.close();
 
     // Open destination directory
-    const dest_dir = std.fs.cwd().openDir(destination, .{}) catch |err| {
+    var dest_dir = std.fs.cwd().openDir(destination, .{}) catch |err| {
         std.debug.print("Error: Failed to open destination directory: {}\n", .{err});
         return err;
     };
+    defer dest_dir.close();
 
     // Extract ZIP with path traversal protection
     try extractZipWithValidation(allocator, dest_dir, file);
