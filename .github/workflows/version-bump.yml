@@ -3,6 +3,11 @@ name: Auto Version Bump
 on:
   push:
     branches: [ master ]
+    paths:
+      - 'src/**'
+      - 'build.zig'
+      - 'build.zig.zon'
+      - '.github/workflows/**'
 
 jobs:
   version-bump:
