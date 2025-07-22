@@ -71,28 +71,63 @@ pub fn getLocalVersion(allocator: std.mem.Allocator) !?[]u8 {
 pub fn findLocalVersion(allocator: std.mem.Allocator) !?[]u8 {
     var current_dir = std.fs.cwd();
     var path_buf: [std.fs.MAX_PATH_BYTES]u8 = undefined;
+    var should_close_current = false;
     
     // Start from current directory and walk up to find .zig-version
     while (true) {
         // Try to read .zig-version in current directory
         if (getLocalVersionInDir(allocator, current_dir)) |version| {
+            // Close current dir if it's not cwd before returning
+            if (should_close_current) {
+                current_dir.close();
+            }
             return version;
         } else |err| switch (err) {
             error.FileNotFound => {}, // Continue searching up
-            else => return err,
+            else => {
+                // Close current dir if it's not cwd before returning error
+                if (should_close_current) {
+                    current_dir.close();
+                }
+                return err;
+            },
         }
         
         // Get current directory path
-        const current_path = current_dir.realpath(".", &path_buf) catch break;
+        const current_path = current_dir.realpath(".", &path_buf) catch {
+            // Close current dir if it's not cwd before breaking
+            if (should_close_current) {
+                current_dir.close();
+            }
+            break;
+        };
         
         // Check if we've reached the root directory
         if (std.mem.eql(u8, current_path, "/") or 
             (current_path.len >= 3 and current_path[1] == ':' and current_path[2] == '\\')) {
+            // Close current dir if it's not cwd before breaking
+            if (should_close_current) {
+                current_dir.close();
+            }
             break; // Windows or Unix root
         }
         
         // Move up one directory
-        current_dir = current_dir.openDir("..", .{}) catch break;
+        const parent_dir = current_dir.openDir("..", .{}) catch {
+            // Close current dir if it's not cwd before breaking
+            if (should_close_current) {
+                current_dir.close();
+            }
+            break;
+        };
+        
+        // Close the current directory if it's not cwd
+        if (should_close_current) {
+            current_dir.close();
+        }
+        
+        current_dir = parent_dir;
+        should_close_current = true; // Now we need to close subsequent dirs
     }
     
     return null;
