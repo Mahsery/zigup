@@ -13,19 +13,15 @@ jobs:
         include:
           - os: ubuntu-latest
             target: x86_64-linux
-            zigup_name: zigup-linux
+            zigup_name: zigup-linux-x86_64
             installer_name: zigup-installer-linux
           - os: macos-latest
-            target: x86_64-macos
-            zigup_name: zigup-macos
-            installer_name: zigup-installer-macos
-          - os: macos-latest
             target: aarch64-macos
-            zigup_name: zigup-macos-arm64
+            zigup_name: zigup-macos-aarch64
             installer_name: zigup-installer-macos-arm64
           - os: windows-latest
             target: x86_64-windows
-            zigup_name: zigup.exe
+            zigup_name: zigup-windows-x86_64.exe
             installer_name: zigup-installer.exe
 
     steps:
@@ -112,7 +108,6 @@ jobs:
           
           - **Windows**: `zigup-installer.exe`
           - **Linux**: `zigup-installer-linux` 
-          - **macOS (Intel)**: `zigup-installer-macos`
           - **macOS (Apple Silicon)**: `zigup-installer-macos-arm64`
           
           The installer will download the latest zigup binary and set up your PATH automatically.
@@ -120,50 +115,39 @@ jobs:
           **Manual Install:**
           Download the zigup binary directly and add it to your PATH manually:
           
-          - **Windows**: `zigup.exe`
-          - **Linux**: `zigup-linux`
-          - **macOS (Intel)**: `zigup-macos` 
-          - **macOS (Apple Silicon)**: `zigup-macos-arm64`
+          - **Windows**: `zigup-windows-x86_64.exe`
+          - **Linux**: `zigup-linux-x86_64`
+          - **macOS (Apple Silicon)**: `zigup-macos-aarch64`
 
     # Upload zigup binaries
-    - name: Upload zigup-linux
+    - name: Upload zigup-linux-x86_64
       uses: actions/upload-release-asset@v1
       env:
         GITHUB_TOKEN: ${{ secrets.PERSONAL_TOKEN }}
       with:
         upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./zigup-x86_64-linux/zigup-linux
-        asset_name: zigup-linux
+        asset_path: ./zigup-x86_64-linux/zigup-linux-x86_64
+        asset_name: zigup-linux-x86_64
         asset_content_type: application/octet-stream
 
-    - name: Upload zigup-macos
+    - name: Upload zigup-macos-aarch64
       uses: actions/upload-release-asset@v1
       env:
         GITHUB_TOKEN: ${{ secrets.PERSONAL_TOKEN }}
       with:
         upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./zigup-x86_64-macos/zigup-macos
-        asset_name: zigup-macos
+        asset_path: ./zigup-aarch64-macos/zigup-macos-aarch64
+        asset_name: zigup-macos-aarch64
         asset_content_type: application/octet-stream
 
-    - name: Upload zigup-macos-arm64
+    - name: Upload zigup-windows-x86_64.exe
       uses: actions/upload-release-asset@v1
       env:
         GITHUB_TOKEN: ${{ secrets.PERSONAL_TOKEN }}
       with:
         upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./zigup-aarch64-macos/zigup-macos-arm64
-        asset_name: zigup-macos-arm64
-        asset_content_type: application/octet-stream
-
-    - name: Upload zigup.exe
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.PERSONAL_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./zigup-x86_64-windows/zigup.exe
-        asset_name: zigup.exe
+        asset_path: ./zigup-x86_64-windows/zigup-windows-x86_64.exe
+        asset_name: zigup-windows-x86_64.exe
         asset_content_type: application/octet-stream
 
     # Upload installer binaries
@@ -175,16 +159,6 @@ jobs:
         upload_url: ${{ steps.create_release.outputs.upload_url }}
         asset_path: ./installer-x86_64-linux/zigup-installer-linux
         asset_name: zigup-installer-linux
-        asset_content_type: application/octet-stream
-
-    - name: Upload zigup-installer-macos
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.PERSONAL_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./installer-x86_64-macos/zigup-installer-macos
-        asset_name: zigup-installer-macos
         asset_content_type: application/octet-stream
 
     - name: Upload zigup-installer-macos-arm64

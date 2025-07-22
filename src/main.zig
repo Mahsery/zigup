@@ -170,8 +170,8 @@ fn selfUpdate(allocator: std.mem.Allocator) !void {
     var http_client = HttpClient.init(allocator);
     defer http_client.deinit();
     
-    // Get latest release info from GitHub API
-    const api_url = "https://api.github.com/repos/Mahsery/zigup/releases/latest";
+    // Get latest release info from GitHub API (including prereleases)
+    const api_url = "https://api.github.com/repos/Mahsery/zigup/releases?per_page=1";
     const body = http_client.fetchJson(api_url) catch |err| {
         std.debug.print("Error: Failed to fetch release information: {}\n", .{err});
         return ZigupError.HttpRequestFailed;
@@ -230,10 +230,9 @@ fn selfUpdate(allocator: std.mem.Allocator) !void {
 }
 
 fn parseLatestTag(allocator: std.mem.Allocator, json_body: []const u8) ![]u8 {
-    // Simple JSON parsing to extract tag_name
-    const tag_start = std.mem.indexOf(u8, json_body, "\"tag_name\":") orelse return ZigupError.TagNotFound;
-    const quote_start = std.mem.indexOf(u8, json_body[tag_start..], "\"") orelse return ZigupError.TagNotFound;
-    const value_start = tag_start + quote_start + 1;
+    // Parse array response and get first release tag_name
+    const tag_start = std.mem.indexOf(u8, json_body, "\"tag_name\":\"") orelse return ZigupError.TagNotFound;
+    const value_start = tag_start + 12; // Skip "tag_name":"
     const next_quote = std.mem.indexOf(u8, json_body[value_start..], "\"") orelse return ZigupError.TagNotFound;
     const tag_name = json_body[value_start..value_start + next_quote];
     
@@ -250,11 +249,7 @@ fn getPlatformBinary() []const u8 {
             .aarch64 => "zigup-linux-aarch64",
             else => "zigup-linux-x86_64",
         },
-        .macos => switch (builtin.cpu.arch) {
-            .x86_64 => "zigup-macos-x86_64",
-            .aarch64 => "zigup-macos-aarch64",
-            else => "zigup-macos-x86_64",
-        },
+        .macos => "zigup-macos-aarch64",
         .windows => switch (builtin.cpu.arch) {
             .x86_64 => "zigup-windows-x86_64.exe",
             else => "zigup-windows-x86_64.exe",
