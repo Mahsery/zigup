@@ -97,7 +97,7 @@ jobs:
         tag_name: ${{ github.ref }}
         release_name: ZigUp ${{ steps.version.outputs.version }}
         draft: false
-        prerelease: ${{ steps.is_release.outputs.prerelease }}
+        prerelease: false
         body: |
           ## ZigUp ${{ steps.version.outputs.version }}
           
