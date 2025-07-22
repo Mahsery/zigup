@@ -12,6 +12,7 @@ const use = @import("commands/use.zig");
 const validation = @import("utils/validation.zig");
 const ZigupError = @import("utils/errors.zig").ZigupError;
 const HttpClient = @import("utils/http_client.zig").HttpClient;
+const Platform = @import("utils/platform.zig");
 
 const Command = enum {
     update,
@@ -147,7 +148,9 @@ fn showHelp() !void {
     try stdout.print("    use <ver>        Set local Zig version for current project\n", .{});
     try stdout.print("    remove <ver>     Remove an installed Zig version\n", .{});
     try stdout.print("    self update      Update zigup to the latest version\n\n", .{});
-    try stdout.print("EXAMPLES:\n", .{});
+    try stdout.print("DIRECTORIES:\n", .{});
+    try printDirectoryInfo(stdout);
+    try stdout.print("\nEXAMPLES:\n", .{});
     try stdout.print("    zigup update\n", .{});
     try stdout.print("    zigup install 0.14.1\n", .{});
     try stdout.print("    zigup default nightly\n", .{});
@@ -156,6 +159,33 @@ fn showHelp() !void {
     try stdout.print("    zigup remove 0.13.0\n", .{});
 }
 
+fn printDirectoryInfo(stdout: anytype) !void {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+    
+    // Installation directory
+    const install_base = Platform.Platform.getBinBaseDir(allocator) catch "~/bin";
+    defer if (!std.mem.eql(u8, install_base, "~/bin")) allocator.free(install_base);
+    try stdout.print("    Installations:   {s}/<version>/     (Zig versions installed here)\n", .{install_base});
+    
+    // Wrapper/symlink directory  
+    const bin_dir = Platform.Platform.getBinDir(allocator) catch "~/.local/bin";
+    defer if (!std.mem.eql(u8, bin_dir, "~/.local/bin")) allocator.free(bin_dir);
+    try stdout.print("    Wrapper:         {s}/zig             (Main zig command)\n", .{bin_dir});
+    
+    // Cache directory
+    const cache_dir = Platform.Platform.getCacheDir(allocator) catch blk: {
+        const builtin = @import("builtin");
+        break :blk switch (builtin.os.tag) {
+            .windows => "~/AppData/Local/zigup",
+            else => "~/.cache/zigup",
+        };
+    };
+    defer if (!std.mem.eql(u8, cache_dir, "~/.cache/zigup") and !std.mem.eql(u8, cache_dir, "~/AppData/Local/zigup")) allocator.free(cache_dir);
+    try stdout.print("    Cache:           {s}/                (Version info & downloads)\n", .{cache_dir});
+    try stdout.print("    Local Config:    ./.zig-version       (Project-specific version)\n", .{});
+}
 
 fn validateArguments(args: []const []const u8) !void {
     for (args) |arg| {
